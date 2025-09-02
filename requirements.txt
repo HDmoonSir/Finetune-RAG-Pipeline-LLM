@@ -1,0 +1,10 @@
+PyMuPDF
+tqdm
+google-generativeai
+torch
+transformers
+peft
+datasets
+trl
+unsloth
+accelerate
