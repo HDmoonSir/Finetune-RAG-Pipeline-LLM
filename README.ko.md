@@ -105,6 +105,36 @@ python rag_pipeline.py {model_type} "{your_question}"
     python rag_pipeline.py local-quantized "세종대왕이 한글을 창제한 연도는?"
     ```
 
+#### `rag_interactive_cli.py`
+
+RAG 파이프라인을 위한 대화형(Interactive) 명령줄 인터페이스입니다. 이 스크립트는 시작 시 모델과 지식 베이스를 한 번만 로드하여, 재로딩 없이 연속적인 질문을 가능하게 합니다.
+
+**사용법:**
+```bash
+python rag_interactive_cli.py {model_type}
+```
+
+**인자:**
+- `model_type`: 사용할 모델의 타입. `rag_pipeline.py`와 동일한 선택지: `api`, `local`, `local-quantized`.
+
+**상호작용:**
+스크립트 시작 후, 질문 프롬프트가 나타납니다. 질문을 입력하고 Enter를 누르세요. 종료하려면 `exit` 또는 `quit`를 입력하고 Enter를 누르세요.
+
+**실행 예시:**
+
+1.  **API 모델 (대화형):**
+    ```bash
+    export GEMINI_API_KEY="YOUR_API_KEY"
+    python rag_interactive_cli.py api
+    ```
+    (프롬프트에 질문 입력)
+
+2.  **로컬 모델 (비양자화, 대화형):**
+    ```bash
+    python rag_interactive_cli.py local
+    ```
+    (프롬프트에 질문 입력)
+
 ## 프로젝트 설정
 
 1.  **저장소 복제(Clone):**

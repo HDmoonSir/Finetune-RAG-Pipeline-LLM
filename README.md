@@ -105,6 +105,36 @@ python rag_pipeline.py {model_type} "your_question"
     python rag_pipeline.py local-quantized "세종대왕이 한글을 창제한 연도는?"
     ```
 
+#### `rag_interactive_cli.py`
+
+An interactive command-line interface for the RAG pipeline. This script loads the model and knowledge base once at startup, allowing for continuous questioning without reloading.
+
+**Usage:**
+```bash
+python rag_interactive_cli.py {model_type}
+```
+
+**Arguments:**
+- `model_type`: The type of model to use. Same choices as `rag_pipeline.py`: `api`, `local`, `local-quantized`.
+
+**Interaction:**
+After starting, the script will prompt you for questions. Type your question and press Enter. To exit, type `exit` or `quit` and press Enter.
+
+**Examples:**
+
+1.  **API Model (Interactive):**
+    ```bash
+    export GEMINI_API_KEY="YOUR_API_KEY"
+    python rag_interactive_cli.py api
+    ```
+    (Then type questions at the prompt)
+
+2.  **Local Model (Non-Quantized, Interactive):**
+    ```bash
+    python rag_interactive_cli.py local
+    ```
+    (Then type questions at the prompt)
+
 ## Project Setup
 
 1.  **Clone the repository:**

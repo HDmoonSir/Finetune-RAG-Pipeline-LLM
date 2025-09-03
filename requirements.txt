@@ -1,10 +1,36 @@
-PyMuPDF
-tqdm
-google-generativeai
+# Core ML/DL Libraries
 torch
 transformers
-peft
-datasets
-trl
-unsloth
 accelerate
+datasets
+
+# Fine-tuning (LoRA)
+peft
+trl
+
+# Unsloth (Optimized Fine-tuning & Inference)
+# Note: This installs from a specific git commit for compatibility.
+unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+
+# PDF Processing
+PyMuPDF
+
+# Gemini API (for preprocessing)
+google-generativeai
+
+# RAG Pipeline (LangChain)
+langchain
+langchain-core
+langchain-community
+langchain-huggingface
+langchain-google-genai
+langchain-text-splitters
+
+# RAG - Vector Store
+faiss-cpu
+
+# RAG - Embeddings
+sentence-transformers
+
+# Utilities
+tqdm
