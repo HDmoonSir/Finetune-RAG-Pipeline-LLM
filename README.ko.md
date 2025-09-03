@@ -87,6 +87,8 @@ python rag_pipeline.py {model_type} "{your_question}"
 
 - `your_question`: RAG 시스템에 질문할 내용. 반드시 큰따옴표("")로 감싸야 합니다.
 
+- `--lora-path`: LoRA 어댑터의 경로 (선택 사항). 로컬 모델에만 적용됩니다.
+
 **실행 예시:**
 
 1.  **API 모델 테스트:**
@@ -116,6 +118,8 @@ python rag_interactive_cli.py {model_type}
 
 **인자:**
 - `model_type`: 사용할 모델의 타입. `rag_pipeline.py`와 동일한 선택지: `api`, `local`, `local-quantized`.
+
+- `--lora-path`: LoRA 어댑터의 경로 (선택 사항). 로컬 모델에만 적용됩니다.
 
 **상호작용:**
 스크립트 시작 후, 질문 프롬프트가 나타납니다. 질문을 입력하고 Enter를 누르세요. 종료하려면 `exit` 또는 `quit`를 입력하고 Enter를 누르세요.

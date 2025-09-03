@@ -87,6 +87,8 @@ python rag_pipeline.py {model_type} "your_question"
 
 - `your_question`: The question you want to ask the RAG system. Must be enclosed in double quotes.
 
+- `--lora-path`: Path to the LoRA adapter (optional). Only applicable for local models.
+
 **Execution Examples:**
 
 1.  **API Model Test:**
@@ -116,6 +118,8 @@ python rag_interactive_cli.py {model_type}
 
 **Arguments:**
 - `model_type`: The type of model to use. Same choices as `rag_pipeline.py`: `api`, `local`, `local-quantized`.
+
+- `--lora-path`: Path to the LoRA adapter (optional). Only applicable for local models.
 
 **Interaction:**
 After starting, the script will prompt you for questions. Type your question and press Enter. To exit, type `exit` or `quit` and press Enter.

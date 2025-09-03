@@ -7,6 +7,7 @@ import argparse
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from unsloth import FastLanguageModel
 from langchain_google_genai import ChatGoogleGenerativeAI
+from peft import PeftModel # LoRA 모델 로딩을 위해 추가
 
 # --- LangChain 및 RAG 관련 라이브러리 ---
 from langchain_huggingface import HuggingFacePipeline
@@ -22,7 +23,7 @@ from langchain_core.runnables import RunnablePassthrough
 # 토크나이저 병렬 처리 비활성화
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-def load_llm(model_type: str):
+def load_llm(model_type: str, lora_path: str = None):
     """선택된 타입에 따라 언어 모델을 로드하는 함수"""
     
     # 1. API 모델 로드
@@ -64,6 +65,13 @@ def load_llm(model_type: str):
     
     else:
         raise ValueError(f"Invalid model_type: {model_type}")
+
+    # 로컬 모델 로드 후 LoRA 어댑터 병합 (선택 사항)
+    if lora_path:
+        print(f"Loading LoRA adapter from {lora_path}...")
+        model = PeftModel.from_pretrained(model, lora_path)
+        model = model.merge_and_unload() # 추론을 위해 LoRA 가중치 병합
+        print("LoRA adapter loaded and merged.")
 
     # 로컬 모델들을 위한 파이프라인 생성
     pipe = pipeline(
@@ -129,11 +137,17 @@ def main():
         help="Type of model to use for inference."
     )
     parser.add_argument("question", type=str, help="The question to ask the RAG system.")
+    parser.add_argument(
+        "--lora-path",
+        type=str,
+        default=None,
+        help="Path to the LoRA adapter (optional). Only applicable for local models."
+    )
     args = parser.parse_args()
 
     try:
         # 1. 모델 로드
-        llm = load_llm(args.model_type)
+        llm = load_llm(args.model_type, args.lora_path)
         print("Model loaded successfully.")
 
         # 2. 리트리버 설정
