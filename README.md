@@ -1,12 +1,14 @@
-# LLM Fine-tuning Pipeline
+# LLM Finetune & RAG Pipeline
 
-This project provides a set of Python scripts to build a custom dataset from PDF files and fine-tune a Large Language Model (LLM) using that data. The pipeline consists of three main stages: PDF text extraction, data preprocessing and generation using the Gemini API, and model training.
+This project provides a set of Python scripts to build a custom dataset from PDF files, fine-tune a Large Language Model (LLM), and run a Retrieval-Augmented Generation (RAG) pipeline.
 
 ## Scripts and Workflow
 
-The process is divided into the following scripts, which should be run in order:
+The process is divided into the following stages:
 
-### 1. `extract_pdf_text.py`
+### 1. Data Preparation
+
+#### `extract_pdf_text.py`
 
 Extracts text from PDF files and saves it in JSONL format. Each line in the output file represents a page from the PDF.
 
@@ -19,7 +21,7 @@ python extract_pdf_text.py --file_path /path/to/your/document.pdf --start_page 1
 - `--end_page` (optional): The last page to extract (default: end of the document).
 - `--output_file` (optional): Name for the output `.jsonl` file.
 
-### 2. `preprocess_with_gemini.py`
+#### `preprocess_with_gemini.py`
 
 Uses the extracted text to generate a training dataset with the Gemini API. It supports two modes:
 - `qa`: Generates question-answer pairs formatted for instruction fine-tuning (Llama 3 format).
@@ -41,13 +43,13 @@ python preprocess_with_gemini.py --mode unsupervised
 ```
 This script will process all `.jsonl` files found in the `data/` directory and create either `gemini_generated_qa_dataset.jsonl` or `gemini_generated_unsupervised_dataset.jsonl`.
 
-### 3. Model Training
+### 2. Model Fine-tuning
 
-Two scripts are provided for fine-tuning the model.
+Two scripts are provided for fine-tuning the `MLP-KTLim/llama-3-Korean-Bllossom-8B` model.
 
 #### `train_llm.py` (Standard)
 
-Fine-tunes the `MLP-KTLim/llama-3-Korean-Bllossom-8B` model using LoRA.
+Fine-tunes the model using LoRA.
 
 **Usage:**
 ```bash
@@ -64,6 +66,44 @@ A memory-efficient and faster version of the training script using the Unsloth l
 python train_unsloth.py --dataset_path /path/to/your_dataset.jsonl
 ```
 - `--dataset_path`: Path to the generated `.jsonl` dataset file.
+
+### 3. RAG Inference
+
+#### `rag_pipeline.py`
+
+An integrated script to run a Retrieval-Augmented Generation (RAG) pipeline. It uses the KorQuAD dataset as its knowledge base and supports multiple model-loading strategies for inference.
+
+**Usage:**
+```bash
+python rag_pipeline.py {model_type} "your_question"
+```
+
+**Positional Arguments:**
+
+- `model_type`: The type of model to use for inference.
+  - `api`: Uses the Gemini API (`gemini-1.5-flash-latest`). Requires the `GEMINI_API_KEY` environment variable to be set.
+  - `local`: Uses the full-precision local model (`MLP-KTLim/llama-3-Korean-Bllossom-8B`). This is recommended for GPUs like the Titan V (Volta architecture) where Unsloth may have compatibility issues.
+  - `local-quantized`: Uses a 4-bit quantized version of the local model via Unsloth for faster inference and lower memory usage. Recommended for compatible NVIDIA GPUs (Ampere, Turing, Ada, etc.).
+
+- `your_question`: The question you want to ask the RAG system. Must be enclosed in double quotes.
+
+**Execution Examples:**
+
+1.  **API Model Test:**
+    ```bash
+    export GEMINI_API_KEY="YOUR_API_KEY"
+    python rag_pipeline.py api "파우스트의 작가는 누구인가?"
+    ```
+
+2.  **Local Model Test (Non-Quantized for Volta/Compatibility):**
+    ```bash
+    python rag_pipeline.py local "임진왜란이 발발한 연도는 언제야?"
+    ```
+
+3.  **Local Model Test (Quantized for compatible GPUs):**
+    ```bash
+    python rag_pipeline.py local-quantized "세종대왕이 한글을 창제한 연도는?"
+    ```
 
 ## Project Setup
 
@@ -88,4 +128,3 @@ python train_unsloth.py --dataset_path /path/to/your_dataset.jsonl
 ## License
 
 This project utilizes Llama 3, which is available under the Llama 3 Community License. Please see the [LICENSE](LICENSE) file for the full license text.
-
