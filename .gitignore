@@ -5,3 +5,4 @@
 /docker_wanted
 /.devcontainer
 /unsloth_compiled_cache
+/__pycache__

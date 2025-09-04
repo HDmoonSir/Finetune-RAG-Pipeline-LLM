@@ -34,3 +34,8 @@ sentence-transformers
 
 # Utilities
 tqdm
+
+# Evaluation
+evaluate
+rouge_score
+pandas

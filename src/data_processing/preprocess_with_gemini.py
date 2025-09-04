@@ -6,6 +6,7 @@ from tqdm import tqdm
 import math
 import argparse
 import typing as tp
+import config
 
 # 1. Gemini API 클라이언트 초기화
 try:
@@ -20,7 +21,7 @@ except (ValueError, KeyError) as e:
 def generate_qa_pairs(prompt_content: str) -> tp.Optional[tp.List[tp.Dict[str, str]]]:
     """Gemini 모델을 사용하여 Q&A 쌍을 생성합니다."""
     model = genai.GenerativeModel(
-        'gemini-1.5-flash',
+        config.GEMINI_PREPROCESS_MODEL,
         generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
     )
     try:
@@ -39,7 +40,7 @@ def generate_qa_pairs(prompt_content: str) -> tp.Optional[tp.List[tp.Dict[str, s
 
 def generate_unsupervised_text(prompt_content: str) -> tp.Optional[str]:
     """Gemini 모델을 사용하여 비지도 학습용 텍스트를 생성합니다."""
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel(config.GEMINI_PREPROCESS_MODEL)
     try:
         response = model.generate_content(prompt_content)
         return response.text
@@ -62,20 +63,10 @@ def format_for_llama3(qa_pairs: tp.List[tp.Dict[str, str]]) -> tp.List[tp.Dict[s
         formatted_data.append({"text": formatted_string})
     return formatted_data
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Gemini를 사용하여 텍스트 데이터셋을 생성합니다.")
-    parser.add_argument(
-        '--mode',
-        type=str,
-        default='qa',
-        choices=['qa', 'unsupervised'],
-        help='생성 모드를 선택합니다. `qa`는 질의응답 쌍을, `unsupervised`는 비지도학습용 텍스트를 생성합니다.'
-    )
-    args = parser.parse_args()
+def main(mode: str) -> None:
+    print(f"🚀'{mode}' 모드로 데이터 생성을 시작합니다.")
 
-    print(f"🚀'{args.mode}' 모드로 데이터 생성을 시작합니다.")
-
-    jsonl_paths: tp.List[str] = glob.glob("data/**/*.jsonl", recursive=True) + glob.glob("data/*.jsonl")
+    jsonl_paths: tp.List[str] = glob.glob(os.path.join(config.DATA_DIR, "**/*.jsonl"), recursive=True) + glob.glob(os.path.join(config.DATA_DIR, "*.jsonl"))
     jsonl_paths = sorted(list(set(jsonl_paths)))
 
     if not jsonl_paths:
@@ -101,16 +92,10 @@ def main() -> None:
 
     all_generated_data: tp.List[tp.Any] = []
     total_api_calls: int = 0
-    TEXT_PAGE_BATCH_SIZE: int = 15
+    TEXT_PAGE_BATCH_SIZE: int = config.TEXT_PAGE_BATCH_SIZE
 
-    qa_prompt_template: str = """아래 [문서 내용]은 '---'로 구분된 여러 텍스트 섹션을 포함하고 있습니다. 이 내용을 바탕으로, 다양하고 핵심적인 Q&A 쌍 25개를 \"qa_pairs\"를 키로 하는 JSON 배열 형식으로 생성해 주세요. 질문과 답변은 모두 한국어로 작성해야 합니다. 출력은 오직 JSON 배열이어야 합니다.
-
-[문서 내용]
-{text}"""
-    unsupervised_prompt_template: str = """아래 [문서 내용]은 '---'로 구분된 여러 텍스트 섹션을 포함하고 있습니다. 이 내용을 바탕으로, 문서의 핵심 주제와 정보를 포괄하는 상세하고 구조화된 요약 텍스트를 생성해 주세요. 원본의 전문적인 스타일과 톤을 유지하며, 여러 단락으로 구성된 가독성 높은 글을 작성해야 합니다. 출력은 오직 생성된 텍스트여야 합니다.
-
-[문서 내용]
-{text}"""
+    qa_prompt_template: str = config.QA_PROMPT_TEMPLATE
+    unsupervised_prompt_template: str = config.UNSUPERVISED_PROMPT_TEMPLATE
 
     for pdf_name, pages in all_pages_by_pdf.items():
         print(f"\n📄 {pdf_name} 문서 처리 중...")
@@ -123,7 +108,7 @@ def main() -> None:
             batch_texts: tp.List[str] = page_texts[i * TEXT_PAGE_BATCH_SIZE : (i + 1) * TEXT_PAGE_BATCH_SIZE]
             combined_text: str = "\n\n---\n\n".join(batch_texts)
 
-            if args.mode == 'qa':
+            if mode == 'qa':
                 prompt: str = qa_prompt_template.format(text=combined_text)
                 result: tp.Optional[tp.List[tp.Dict[str, str]]] = generate_qa_pairs(prompt)
                 if result:
@@ -139,7 +124,7 @@ def main() -> None:
     print(f"\nTotal API calls made: {total_api_calls}")
     print(f"Total items generated before processing: {len(all_generated_data)}")
 
-    if args.mode == 'qa':
+    if mode == 'qa':
         unique_qa_pairs: tp.List[tp.Dict[str, str]] = []
         processed_questions: tp.Set[str] = set()
         for pair in all_generated_data:
@@ -148,18 +133,16 @@ def main() -> None:
                 unique_qa_pairs.append(pair)
                 processed_questions.add(question)
         final_data: tp.List[tp.Dict[str, str]] = format_for_llama3(unique_qa_pairs)
-        output_file: str = 'gemini_generated_qa_dataset.jsonl'
+        output_file: str = config.QA_DATASET_PATH
         print(f"Total unique Q&A pairs after deduplication: {len(unique_qa_pairs)}")
     else:
         final_data = all_generated_data
-        output_file = 'gemini_generated_unsupervised_dataset.jsonl'
+        output_file = config.UNSUPERVISED_DATASET_PATH
 
+    os.makedirs(config.DEFAULT_OUTPUT_DIR, exist_ok=True)
     with open(output_file, 'w', encoding='utf-8') as f:
         for item in final_data:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
     print(f"\n✅ All data has been saved to '{output_file}'.")
     print(f"Total final records created: {len(final_data)}")
-
-if __name__ == "__main__":
-    main()

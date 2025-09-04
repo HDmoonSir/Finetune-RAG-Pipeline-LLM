@@ -2,142 +2,111 @@
 
 This project provides a set of Python scripts to build a custom dataset from PDF files, fine-tune a Large Language Model (LLM), and run a Retrieval-Augmented Generation (RAG) pipeline.
 
-## Scripts and Workflow
+## Project Structure
 
-The process is divided into the following stages:
+The project is organized into the following directories:
+
+- `src/`: Contains all Python source code.
+  - `data_processing/`: Scripts for data extraction and preprocessing.
+  - `training/`: Scripts for model fine-tuning and LoRA merging.
+  - `rag/`: Scripts for the RAG pipeline, vector store building, and inference.
+  - `evaluation/`: Scripts for evaluating the RAG pipeline.
+- `run_data.py`: Runner script for data processing tasks.
+- `run_training.py`: Runner script for model training and merging tasks.
+- `run_rag.py`: Runner script for RAG pipeline tasks.
+- `run_evaluation.py`: Runner script for evaluation tasks.
+- `data/`: Directory for raw data (e.g., PDFs, source JSONL files).
+- `data_result/`: Directory for generated outputs (datasets, vector stores, models, evaluation results).
+- `config.py`: Main configuration file for the project.
+
+## Workflow and Usage
+
+The process is divided into the following stages. All scripts should be run from the project's root directory.
 
 ### 1. Data Preparation
 
-#### `extract_pdf_text.py`
+#### a. Extract Text from PDF
+- **Script:** `run_data.py extract-pdf`
+- **Description:** Extracts text from PDF files and saves it in JSONL format.
+- **Usage:**
+  ```bash
+  python3.11 run_data.py extract-pdf --file_path /path/to/your/document.pdf
+  ```
+- **Arguments:**
+  - `--file_path`: Path to the PDF file.
+  - `--start_page` (optional): The first page to extract (default: 1).
+  - `--end_page` (optional): The last page to extract (default: end of the document).
 
-Extracts text from PDF files and saves it in JSONL format. Each line in the output file represents a page from the PDF.
+#### b. Generate Training Data
+- **Script:** `run_data.py preprocess-gemini`
+- **Description:** Uses extracted text to generate training datasets with the Gemini API.
+- **Prerequisites:** `export GEMINI_API_KEY="YOUR_API_KEY"`
+- **Usage:**
+  ```bash
+  # For Question-Answer (SFT) dataset generation
+  python3.11 run_data.py preprocess-gemini --mode qa
 
-**Usage:**
-```bash
-python extract_pdf_text.py --file_path /path/to/your/document.pdf --start_page 1 --end_page 50
-```
-- `--file_path`: Path to the PDF file.
-- `--start_page` (optional): The first page to extract (default: 1).
-- `--end_page` (optional): The last page to extract (default: end of the document).
-- `--output_file` (optional): Name for the output `.jsonl` file.
-
-#### `preprocess_with_gemini.py`
-
-Uses the extracted text to generate a training dataset with the Gemini API. It supports two modes:
-- `qa`: Generates question-answer pairs formatted for instruction fine-tuning (Llama 3 format).
-- `unsupervised`: Generates coherent, summarized text for unsupervised fine-tuning.
-
-**Prerequisites:**
-You must set your Gemini API key as an environment variable:
-```bash
-export GEMINI_API_KEY="YOUR_API_KEY"
-```
-
-**Usage:**
-```bash
-# For Question-Answer dataset generation
-python preprocess_with_gemini.py --mode qa
-
-# For unsupervised dataset generation
-python preprocess_with_gemini.py --mode unsupervised
-```
-This script will process all `.jsonl` files found in the `data/` directory and create either `gemini_generated_qa_dataset.jsonl` or `gemini_generated_unsupervised_dataset.jsonl`.
+  # For unsupervised dataset generation
+  python3.11 run_data.py preprocess-gemini --mode unsupervised
+  ```
 
 ### 2. Model Fine-tuning
 
-Two scripts are provided for fine-tuning the `MLP-KTLim/llama-3-Korean-Bllossom-8B` model.
+#### a. Fine-tune the Model
+- **Scripts:** `run_training.py train` (Standard) or `run_training.py train-unsloth` (Optimized)
+- **Description:** Fine-tunes the model using LoRA. Supports both supervised (SFT) and unsupervised modes.
+- **Usage:**
+  ```bash
+  # For Supervised Fine-Tuning (SFT)
+  python3.11 run_training.py train-unsloth --dataset_path <path_to_qa_dataset> --mode sft
 
-#### `train_llm.py` (Standard)
+  # For Unsupervised Continued Pre-training
+  python3.11 run_training.py train-unsloth --dataset_path <path_to_unsupervised_dataset> --mode unsupervised
+  ```
 
-Fine-tunes the model using LoRA.
+#### b. Merge LoRA Adapter
+- **Script:** `run_training.py merge`
+- **Description:** Merges a trained LoRA adapter into the base model to create a new, standalone model. This is useful for creating a domain-adapted base model after unsupervised tuning.
+- **Usage:**
+  ```bash
+  python3.11 run_training.py merge --lora_path <path_to_lora_adapter> --output_dir <path_to_save_merged_model>
+  ```
 
-**Usage:**
-```bash
-python train_llm.py --dataset_path /path/to/your_dataset.jsonl
-```
-- `--dataset_path`: Path to the generated `.jsonl` dataset file.
+### 3. RAG Pipeline
 
-#### `train_unsloth.py` (Optimized)
+#### a. Build Vector Store
+- **Script:** `run_rag.py build-db`
+- **Description:** Builds a FAISS vector store from your source documents for the RAG pipeline.
+- **Usage:**
+  ```bash
+  python3.11 run_rag.py build-db --input_dir data/
+  ```
 
-A memory-efficient and faster version of the training script using the Unsloth library.
+#### b. Run RAG Inference
+- **Scripts:** `run_rag.py pipeline` (single question) or `run_rag.py cli` (interactive chat)
+- **Description:** Runs the RAG pipeline using a specified model and knowledge base.
+- **Usage (Interactive CLI):**
+  ```bash
+  # Using API model and custom vector store
+  export GEMINI_API_KEY="YOUR_API_KEY"
+  python3.11 run_rag.py cli --model_type api --knowledge_base data_result/vector_store
 
-**Usage:**
-```bash
-python train_unsloth.py --dataset_path /path/to/your_dataset.jsonl
-```
-- `--dataset_path`: Path to the generated `.jsonl` dataset file.
+  # Using local model and custom vector store
+  python3.11 run_rag.py cli --model_type local --knowledge_base data_result/vector_store
+  ```
+- **Arguments:**
+  - `--model_type`: `api`, `local`, `local-quantized`.
+  - `--lora-path`: Path to the LoRA adapter (optional).
+  - `--knowledge_base`: Path to a custom FAISS vector store, or `default` to use KorQuAD.
 
-### 3. RAG Inference
+### 4. Evaluation
 
-#### `rag_pipeline.py`
-
-An integrated script to run a Retrieval-Augmented Generation (RAG) pipeline. It uses the KorQuAD dataset as its knowledge base and supports multiple model-loading strategies for inference.
-
-**Usage:**
-```bash
-python rag_pipeline.py {model_type} "your_question"
-```
-
-**Positional Arguments:**
-
-- `model_type`: The type of model to use for inference.
-  - `api`: Uses the Gemini API (`gemini-1.5-flash-latest`). Requires the `GEMINI_API_KEY` environment variable to be set.
-  - `local`: Uses the full-precision local model (`MLP-KTLim/llama-3-Korean-Bllossom-8B`). This is recommended for GPUs like the Titan V (Volta architecture) where Unsloth may have compatibility issues.
-  - `local-quantized`: Uses a 4-bit quantized version of the local model via Unsloth for faster inference and lower memory usage. Recommended for compatible NVIDIA GPUs (Ampere, Turing, Ada, etc.).
-
-- `your_question`: The question you want to ask the RAG system. Must be enclosed in double quotes.
-
-- `--lora-path`: Path to the LoRA adapter (optional). Only applicable for local models.
-
-**Execution Examples:**
-
-1.  **API Model Test:**
-    ```bash
-    export GEMINI_API_KEY="YOUR_API_KEY"
-    python rag_pipeline.py api "파우스트의 작가는 누구인가?"
-    ```
-
-2.  **Local Model Test (Non-Quantized for Volta/Compatibility):**
-    ```bash
-    python rag_pipeline.py local "임진왜란이 발발한 연도는 언제야?"
-    ```
-
-3.  **Local Model Test (Quantized for compatible GPUs):**
-    ```bash
-    python rag_pipeline.py local-quantized "세종대왕이 한글을 창제한 연도는?"
-    ```
-
-#### `rag_interactive_cli.py`
-
-An interactive command-line interface for the RAG pipeline. This script loads the model and knowledge base once at startup, allowing for continuous questioning without reloading.
-
-**Usage:**
-```bash
-python rag_interactive_cli.py {model_type}
-```
-
-**Arguments:**
-- `model_type`: The type of model to use. Same choices as `rag_pipeline.py`: `api`, `local`, `local-quantized`.
-
-- `--lora-path`: Path to the LoRA adapter (optional). Only applicable for local models.
-
-**Interaction:**
-After starting, the script will prompt you for questions. Type your question and press Enter. To exit, type `exit` or `quit` and press Enter.
-
-**Examples:**
-
-1.  **API Model (Interactive):**
-    ```bash
-    export GEMINI_API_KEY="YOUR_API_KEY"
-    python rag_interactive_cli.py api
-    ```
-    (Then type questions at the prompt)
-
-2.  **Local Model (Non-Quantized, Interactive):**
-    ```bash
-    python rag_interactive_cli.py local
-    ```
-    (Then type questions at the prompt)
+- **Script:** `run_evaluation.py`
+- **Description:** Evaluates the RAG pipeline on a QA dataset and calculates ROUGE/BLEU scores.
+- **Usage:**
+  ```bash
+  python3.11 run_evaluation.py --model_type api --knowledge_base data_result/vector_store --num_samples 20
+  ```
 
 ## Project Setup
 
@@ -150,14 +119,7 @@ After starting, the script will prompt you for questions. Type your question and
     ```bash
     pip install -r requirements.txt
     ```
-3.  **Prepare data:**
-    - Place your PDF files in a directory (e.g., `data/raw_pdfs/`).
-    - Run `extract_pdf_text.py` to convert them to `.jsonl`.
-4.  **Generate dataset:**
-    - Set the `GEMINI_API_KEY`.
-    - Run `preprocess_with_gemini.py` to create your training data.
-5.  **Train the model:**
-    - Run either `train_llm.py` or `train_unsloth.py` with the path to your generated dataset.
+3.  Follow the workflow steps above to prepare data, train, and run the pipeline.
 
 ## License
 
