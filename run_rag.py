@@ -1,70 +1,104 @@
-
+import os
 import argparse
-from src.rag import build_vector_store, rag_pipeline, rag_interactive_cli
-import config
+from omegaconf import OmegaConf
 
-def main():
+# Set CUDA_VISIBLE_DEVICES to restrict GPU visibility
+os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
+
+from src.utils.config_loader import load_inference_config, load_train_config, InferenceConfig, TrainConfig
+from src.rag import rag_pipeline, rag_interactive_cli
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="RAG pipeline CLI for the project.")
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
-    # --- Sub-parser for build_vector_store ---
-    parser_build_db = subparsers.add_parser("build-db", help="Build a FAISS vector store.")
-    parser_build_db.add_argument(
-        '--input_dir', type=str, default=config.DATA_DIR,
-        help=f"Directory containing the .jsonl files to process. Defaults to '{config.DATA_DIR}'."
-    )
-    parser_build_db.add_argument(
-        '--vector_store_path', type=str, default=config.VECTOR_STORE_DIR,
-        help=f"Path to save the FAISS vector store. Defaults to '{config.VECTOR_STORE_DIR}'."
-    )
-
-    # --- Base arguments for RAG inference ---
+    # --- Base arguments for RAG inference (pipeline and cli) ---
     rag_parent_parser = argparse.ArgumentParser(add_help=False)
     rag_parent_parser.add_argument(
-        "--model_type", type=str, default="api", choices=["api", "local", "local-quantized"],
-        help="Type of model to use for inference."
+        "--config",
+        type=str,
+        required=True,
+        help="Path to the inference configuration YAML file (e.g., configs/inference/local_rag.yaml)"
     )
     rag_parent_parser.add_argument(
-        "--lora_path", type=str, default=None,
-        help="Path to the LoRA adapter (optional). Only applicable for local models."
-    )
-    rag_parent_parser.add_argument(
-        "--knowledge_base", type=str, default="default",
-        help=f"Knowledge base to use. 'default' for KorQuAD, or a path to a custom FAISS vector store (e.g., {config.VECTOR_STORE_DIR})."
-    )
-    rag_parent_parser.add_argument(
-        "--model_id", type=str, default=config.LOCAL_MODEL_ID,
-        help=f"Path/ID to the base model. Defaults to {config.LOCAL_MODEL_ID}."
+        "--train_experiment_dir",
+        type=str,
+        default=None,
+        help="Optional: Path to a completed training experiment directory. If provided, model_id and lora_path will be loaded from its config.yaml."
     )
 
-    # --- Sub-parser for rag_pipeline ---
+    # --- Sub-parser for rag_pipeline (single query) ---
     parser_pipeline = subparsers.add_parser("pipeline", parents=[rag_parent_parser], help="Run a single RAG query.")
-    parser_pipeline.add_argument("question", type=str, help="The question to ask the RAG system.")
+    parser_pipeline.add_argument("--question", type=str, required=True, help="The question to ask the RAG system.")
 
     # --- Sub-parser for rag_interactive_cli ---
     parser_cli = subparsers.add_parser("cli", parents=[rag_parent_parser], help="Run an interactive RAG CLI.")
 
     args = parser.parse_args()
 
-    if args.command == "build-db":
-        print("Building vector store...")
-        build_vector_store.main(args.input_dir, args.vector_store_path)
-    elif args.command == "pipeline":
+    # Load the inference configuration
+    inference_config: InferenceConfig = load_inference_config(args.config)
+
+    # If a training experiment directory is provided, override model settings
+    if args.train_experiment_dir:
+        print(f"Loading model configuration from training experiment: {args.train_experiment_dir}")
+        train_config_path = os.path.join(args.train_experiment_dir, "config.yaml")
+        if not os.path.exists(train_config_path):
+            raise FileNotFoundError(f"Training config not found in experiment directory: {train_config_path}")
+        
+        train_config: TrainConfig = load_train_config(train_config_path)
+        
+        inference_config.model.model_id = train_config.model.base_model_id
+        print(f"Overridden model_id: {inference_config.model.model_id}")
+
+        # Check for unsupervised adapter
+        unsupervised_adapter_path = os.path.join(args.train_experiment_dir, "unsupervised_lora_adapter")
+        if os.path.exists(unsupervised_adapter_path):
+            inference_config.model.unsupervised_lora_path = unsupervised_adapter_path
+            print(f"Found and set unsupervised_lora_path: {unsupervised_adapter_path}")
+
+        # Check for sft adapter
+        sft_adapter_path = os.path.join(args.train_experiment_dir, "sft_lora_adapter")
+        if os.path.exists(sft_adapter_path):
+            inference_config.model.sft_lora_path = sft_adapter_path
+            print(f"Found and set sft_lora_path: {sft_adapter_path}")
+
+    if args.command == "pipeline":
         print("Running RAG pipeline...")
         rag_pipeline.main(
-            model_type=args.model_type,
+            model_type=inference_config.model.model_type,
+            model_id=inference_config.model.model_id,
+            unsupervised_lora_path=inference_config.model.unsupervised_lora_path,
+            sft_lora_path=inference_config.model.sft_lora_path,
+            embedding_model_id=inference_config.model.embedding_model_id,
+            knowledge_base=inference_config.knowledge_base_settings.knowledge_base,
+            text_splitter_chunk_size=inference_config.knowledge_base_settings.text_splitter_chunk_size,
+            text_splitter_chunk_overlap=inference_config.knowledge_base_settings.text_splitter_chunk_overlap,
+            retriever_search_k=inference_config.knowledge_base_settings.retriever_search_k,
+            rag_prompt_template=inference_config.generation.rag_prompt_template,
+            max_new_tokens=inference_config.generation.max_new_tokens,
+            temperature=inference_config.generation.temperature,
+            model_max_seq_length=inference_config.generation.model_max_seq_length,
             question=args.question,
-            lora_path=args.lora_path,
-            knowledge_base=args.knowledge_base,
-            model_id=args.model_id
+            default_knowledge_base_dataset=inference_config.knowledge_base_settings.default_knowledge_base_dataset
         )
     elif args.command == "cli":
         print("Starting RAG interactive CLI...")
         rag_interactive_cli.main(
-            model_type=args.model_type,
-            lora_path=args.lora_path,
-            knowledge_base=args.knowledge_base,
-            model_id=args.model_id
+            model_type=inference_config.model.model_type,
+            model_id=inference_config.model.model_id,
+            unsupervised_lora_path=inference_config.model.unsupervised_lora_path,
+            sft_lora_path=inference_config.model.sft_lora_path,
+            embedding_model_id=inference_config.model.embedding_model_id,
+            knowledge_base=inference_config.knowledge_base_settings.knowledge_base,
+            text_splitter_chunk_size=inference_config.knowledge_base_settings.text_splitter_chunk_size,
+            text_splitter_chunk_overlap=inference_config.knowledge_base_settings.text_splitter_chunk_overlap,
+            retriever_search_k=inference_config.knowledge_base_settings.retriever_search_k,
+            rag_prompt_template=inference_config.generation.rag_prompt_template,
+            max_new_tokens=inference_config.generation.max_new_tokens,
+            temperature=inference_config.generation.temperature,
+            model_max_seq_length=inference_config.generation.model_max_seq_length,
+            default_knowledge_base_dataset=inference_config.knowledge_base_settings.default_knowledge_base_dataset
         )
 
 if __name__ == "__main__":

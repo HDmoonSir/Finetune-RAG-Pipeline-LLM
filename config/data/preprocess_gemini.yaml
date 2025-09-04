@@ -1,0 +1,20 @@
+# configs/data/preprocess_gemini.yaml
+
+# mode(qa, unsupervised)
+mode: "qa"
+gemini_preprocess_model: "gemini-1.5-flash"
+data_dir: "data"
+text_page_batch_size: 15
+qa_prompt_template: |
+  아래 [문서 내용]은 '---'로 구분된 여러 텍스트 섹션을 포함하고 있습니다. 이 내용을 바탕으로, 다양하고 핵심적인 Q&A 쌍 25개를 "qa_pairs"를 키로 하는 JSON 배열 형식으로 생성해 주세요. 질문과 답변은 모두 한국어로 작성해야 합니다. 출력은 오직 JSON 배열이어야 합니다.
+
+  [문서 내용]
+  {text}
+unsupervised_prompt_template: |
+  아래 [문서 내용]은 '---'로 구분된 여러 텍스트 섹션을 포함하고 있습니다. 이 내용을 바탕으로, 문서의 핵심 주제와 정보를 포괄하는 상세하고 구조화된 요약 텍스트를 생성해 주세요. 원본의 전문적인 스타일과 톤을 유지하며, 여러 단락으로 구성된 가독성 높은 글을 작성해야 합니다. 출력은 오직 생성된 텍스트여야 합니다.
+
+  [문서 내용]
+  {text}
+qa_dataset_path: "data_result/gemini_generated_qa_dataset.jsonl"
+unsupervised_dataset_path: "data_result/gemini_generated_unsupervised_dataset.jsonl"
+default_output_dir: "data_result"

@@ -4,11 +4,9 @@ import glob
 import google.generativeai as genai
 from tqdm import tqdm
 import math
-import argparse
 import typing as tp
-import config
 
-# 1. Gemini API 클라이언트 초기화
+# 1. Gemini API 클라이언트 초기화 (환경 변수에서 API 키 로드)
 try:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -16,12 +14,12 @@ try:
     genai.configure(api_key=api_key)
 except (ValueError, KeyError) as e:
     print(f"API 키 설정 오류: {e}")
-    exit()
+    # exit() # Do not exit here, let the calling script handle it
 
-def generate_qa_pairs(prompt_content: str) -> tp.Optional[tp.List[tp.Dict[str, str]]]:
+def generate_qa_pairs(prompt_content: str, gemini_model_name: str) -> tp.Optional[tp.List[tp.Dict[str, str]]]:
     """Gemini 모델을 사용하여 Q&A 쌍을 생성합니다."""
     model = genai.GenerativeModel(
-        config.GEMINI_PREPROCESS_MODEL,
+        gemini_model_name,
         generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
     )
     try:
@@ -30,7 +28,7 @@ def generate_qa_pairs(prompt_content: str) -> tp.Optional[tp.List[tp.Dict[str, s
         if json_text.startswith("```json"):
             json_text = json_text[7:-4].strip()
         json_data = json.loads(json_text)
-        return json_data.get('qa_pairs', [])
+        return json_data.get('qa_pairs', list())
     except (json.JSONDecodeError, AttributeError, ValueError) as e:
         print(f"-- Q&A 생성 오류: {e}")
         return None
@@ -38,9 +36,9 @@ def generate_qa_pairs(prompt_content: str) -> tp.Optional[tp.List[tp.Dict[str, s
         print(f"-- 예기치 않은 오류 발생: {e}")
         return None
 
-def generate_unsupervised_text(prompt_content: str) -> tp.Optional[str]:
+def generate_unsupervised_text(prompt_content: str, gemini_model_name: str) -> tp.Optional[str]:
     """Gemini 모델을 사용하여 비지도 학습용 텍스트를 생성합니다."""
-    model = genai.GenerativeModel(config.GEMINI_PREPROCESS_MODEL)
+    model = genai.GenerativeModel(gemini_model_name)
     try:
         response = model.generate_content(prompt_content)
         return response.text
@@ -50,7 +48,7 @@ def generate_unsupervised_text(prompt_content: str) -> tp.Optional[str]:
 
 def format_for_llama3(qa_pairs: tp.List[tp.Dict[str, str]]) -> tp.List[tp.Dict[str, str]]:
     """Q&A 쌍을 Llama 3의 Instruction Fine-tuning 형식으로 변환합니다."""
-    formatted_data = []
+    formatted_data = list()
     for pair in qa_pairs:
         if 'question' not in pair or 'answer' not in pair or not pair['question'] or not pair['answer']:
             continue
@@ -63,10 +61,20 @@ def format_for_llama3(qa_pairs: tp.List[tp.Dict[str, str]]) -> tp.List[tp.Dict[s
         formatted_data.append({"text": formatted_string})
     return formatted_data
 
-def main(mode: str) -> None:
+def main(
+    mode: str,
+    gemini_preprocess_model: str,
+    data_dir: str,
+    text_page_batch_size: int,
+    qa_prompt_template: str,
+    unsupervised_prompt_template: str,
+    qa_dataset_path: str,
+    unsupervised_dataset_path: str,
+    default_output_dir: str,
+) -> None:
     print(f"🚀'{mode}' 모드로 데이터 생성을 시작합니다.")
 
-    jsonl_paths: tp.List[str] = glob.glob(os.path.join(config.DATA_DIR, "**/*.jsonl"), recursive=True) + glob.glob(os.path.join(config.DATA_DIR, "*.jsonl"))
+    jsonl_paths: tp.List[str] = glob.glob(os.path.join(data_dir, "**/*.jsonl"), recursive=True) + glob.glob(os.path.join(data_dir, "*.jsonl"))
     jsonl_paths = sorted(list(set(jsonl_paths)))
 
     if not jsonl_paths:
@@ -82,7 +90,7 @@ def main(mode: str) -> None:
                     source_pdf: tp.Optional[str] = data.get('source_pdf')
                     if source_pdf:
                         if source_pdf not in all_pages_by_pdf:
-                            all_pages_by_pdf[source_pdf] = []
+                            all_pages_by_pdf[source_pdf] = list()
                         all_pages_by_pdf[source_pdf].append(data)
                 except json.JSONDecodeError:
                     print(f"⚠️ Warning: {path} 파일의 일부 라인에서 JSON 디코딩 오류가 발생했습니다.")
@@ -90,12 +98,8 @@ def main(mode: str) -> None:
     for pdf in all_pages_by_pdf:
         all_pages_by_pdf[pdf].sort(key=lambda x: x.get('page_number', 0))
 
-    all_generated_data: tp.List[tp.Any] = []
+    all_generated_data: tp.List[tp.Any] = list()
     total_api_calls: int = 0
-    TEXT_PAGE_BATCH_SIZE: int = config.TEXT_PAGE_BATCH_SIZE
-
-    qa_prompt_template: str = config.QA_PROMPT_TEMPLATE
-    unsupervised_prompt_template: str = config.UNSUPERVISED_PROMPT_TEMPLATE
 
     for pdf_name, pages in all_pages_by_pdf.items():
         print(f"\n📄 {pdf_name} 문서 처리 중...")
@@ -103,19 +107,19 @@ def main(mode: str) -> None:
         if not page_texts:
             continue
 
-        num_batches: int = math.ceil(len(page_texts) / TEXT_PAGE_BATCH_SIZE)
+        num_batches: int = math.ceil(len(page_texts) / text_page_batch_size)
         for i in tqdm(range(num_batches), desc=f"{os.path.basename(pdf_name)} 처리 진행률"):
-            batch_texts: tp.List[str] = page_texts[i * TEXT_PAGE_BATCH_SIZE : (i + 1) * TEXT_PAGE_BATCH_SIZE]
+            batch_texts: tp.List[str] = page_texts[i * text_page_batch_size : (i + 1) * text_page_batch_size]
             combined_text: str = "\n\n---\n\n".join(batch_texts)
 
             if mode == 'qa':
                 prompt: str = qa_prompt_template.format(text=combined_text)
-                result: tp.Optional[tp.List[tp.Dict[str, str]]] = generate_qa_pairs(prompt)
+                result: tp.Optional[tp.List[tp.Dict[str, str]]] = generate_qa_pairs(prompt, gemini_preprocess_model)
                 if result:
                     all_generated_data.extend(result)
             else: # unsupervised
                 prompt = unsupervised_prompt_template.format(text=combined_text)
-                result: tp.Optional[str] = generate_unsupervised_text(prompt)
+                result: tp.Optional[str] = generate_unsupervised_text(prompt, gemini_preprocess_model)
                 if result:
                     all_generated_data.append({"text": result})
             
@@ -125,7 +129,7 @@ def main(mode: str) -> None:
     print(f"Total items generated before processing: {len(all_generated_data)}")
 
     if mode == 'qa':
-        unique_qa_pairs: tp.List[tp.Dict[str, str]] = []
+        unique_qa_pairs: tp.List[tp.Dict[str, str]] = list()
         processed_questions: tp.Set[str] = set()
         for pair in all_generated_data:
             question: tp.Optional[str] = pair.get('question')
@@ -133,13 +137,13 @@ def main(mode: str) -> None:
                 unique_qa_pairs.append(pair)
                 processed_questions.add(question)
         final_data: tp.List[tp.Dict[str, str]] = format_for_llama3(unique_qa_pairs)
-        output_file: str = config.QA_DATASET_PATH
+        output_file: str = qa_dataset_path
         print(f"Total unique Q&A pairs after deduplication: {len(unique_qa_pairs)}")
     else:
         final_data = all_generated_data
-        output_file = config.UNSUPERVISED_DATASET_PATH
+        output_file = unsupervised_dataset_path
 
-    os.makedirs(config.DEFAULT_OUTPUT_DIR, exist_ok=True)
+    os.makedirs(default_output_dir, exist_ok=True)
     with open(output_file, 'w', encoding='utf-8') as f:
         for item in final_data:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')

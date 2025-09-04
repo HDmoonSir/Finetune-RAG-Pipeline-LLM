@@ -1,17 +1,14 @@
-
 import os
 import json
-import argparse
 import torch
 from tqdm import tqdm
 import pandas as pd
 import evaluate
 import typing as tp
 
-# --- Import RAG components --- 
+# --- Import RAG components ---
 # Note: To avoid code duplication, these functions could be moved to a shared utils file.
 from src.rag.rag_pipeline import load_llm, setup_retriever, create_rag_chain
-import config
 
 def parse_qa_from_text(text: str) -> tp.Optional[tp.Dict[str, str]]:
     """Parses the question and answer from the Llama-3 formatted text."""
@@ -47,19 +44,29 @@ def parse_qa_from_text(text: str) -> tp.Optional[tp.Dict[str, str]]:
     except Exception:
         return None
 
-def run_evaluation(
+def main(
     model_type: str,
-    lora_path: str,
+    model_id: str,
+    lora_path: tp.Optional[str],
+    embedding_model_id: str,
     knowledge_base: str,
+    text_splitter_chunk_size: int,
+    text_splitter_chunk_overlap: int,
+    retriever_search_k: int,
+    default_knowledge_base_dataset: str,
+    rag_prompt_template: str,
+    max_new_tokens: int,
+    temperature: float,
+    model_max_seq_length: int,
     eval_dataset_path: str,
     num_samples: int,
-    model_id: str
+    output_base_dir: str,
 ) -> None:
     """Runs the full RAG evaluation process."""
 
     # 1. Load evaluation dataset
     print(f"Loading evaluation dataset from: {eval_dataset_path}")
-    eval_data = []
+    eval_data = list()
     with open(eval_dataset_path, 'r', encoding='utf-8') as f:
         for line in f:
             data = json.loads(line)
@@ -78,14 +85,28 @@ def run_evaluation(
 
     # 2. Load the RAG chain
     print("\n--- Loading RAG Pipeline ---")
-    llm = load_llm(model_type, model_id, lora_path)
-    retriever = setup_retriever(knowledge_base)
-    rag_chain = create_rag_chain(llm, retriever)
+    llm = load_llm(
+        model_type=model_type,
+        model_id=model_id,
+        lora_path=lora_path,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        model_max_seq_length=model_max_seq_length
+    )
+    retriever = setup_retriever(
+        knowledge_base_path=knowledge_base,
+        embedding_model_id=embedding_model_id,
+        text_splitter_chunk_size=text_splitter_chunk_size,
+        text_splitter_chunk_overlap=text_splitter_chunk_overlap,
+        retriever_search_k=retriever_search_k,
+        default_knowledge_base_dataset=default_knowledge_base_dataset
+    )
+    rag_chain = create_rag_chain(llm, retriever, rag_prompt_template)
     print("--- RAG Pipeline Loaded ---\n")
 
     # 3. Run inference and collect results
-    predictions = []
-    references = []
+    predictions = list()
+    references = list()
     
     for item in tqdm(eval_data, desc="Running RAG Evaluation"):
         question = item['question']
@@ -116,37 +137,29 @@ def run_evaluation(
     print(f"  BLEU: {bleu_results['bleu']:.4f}")
 
     # 5. Save results to a file for inspection
+    results_filename = os.path.join(output_base_dir, "evaluation_results.csv")
+    os.makedirs(output_base_dir, exist_ok=True)
     results_df = pd.DataFrame({
         'question': [item['question'] for item in eval_data],
         'reference_answer': references,
         'generated_answer': predictions
     })
-    
-    results_filename = os.path.join(config.DEFAULT_OUTPUT_DIR, "evaluation_results.csv")
-    os.makedirs(config.DEFAULT_OUTPUT_DIR, exist_ok=True)
     results_df.to_csv(results_filename, index=False, encoding='utf-8-sig')
     print(f"\nDetailed results saved to: {results_filename}")
 
     # 6. Save metrics to a file
+    metrics_filename = os.path.join(output_base_dir, "evaluation_metrics.json")
     metrics_summary = {
         "model_type": model_type,
+        "model_id": model_id,
+        "lora_path": lora_path,
+        "embedding_model_id": embedding_model_id,
         "knowledge_base": knowledge_base,
         "eval_dataset_path": eval_dataset_path,
         "num_samples": len(predictions),
         "rouge": rouge_results,
         "bleu": bleu_results
     }
-    metrics_filename = os.path.join(config.DEFAULT_OUTPUT_DIR, "evaluation_metrics.json")
     with open(metrics_filename, 'w', encoding='utf-8') as f:
         json.dump(metrics_summary, f, ensure_ascii=False, indent=4)
     print(f"Metrics summary saved to: {metrics_filename}")
-
-def main(model_type: str, lora_path: str, knowledge_base: str, eval_dataset_path: str, num_samples: int, model_id: str = config.LOCAL_MODEL_ID):
-    run_evaluation(
-        model_type=model_type,
-        lora_path=lora_path,
-        knowledge_base=knowledge_base,
-        eval_dataset_path=eval_dataset_path,
-        num_samples=num_samples,
-        model_id=model_id
-    )

@@ -5,4 +5,6 @@
 /docker_wanted
 /.devcontainer
 /unsloth_compiled_cache
-/__pycache__
+__pycache__/
+/exp_results
+/config_test

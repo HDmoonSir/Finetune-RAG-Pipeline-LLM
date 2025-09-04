@@ -1,36 +1,77 @@
 import os
 import torch
-from unsloth import FastLanguageModel
-from transformers import AutoTokenizer, TrainingArguments
+from transformers import AutoTokenizer, TrainingArguments, set_seed
 from datasets import load_dataset
 from trl import SFTTrainer
 import typing as tp
-import config
+from peft import PeftModel
 
-def main(dataset_path: str, mode: str, base_model_path: str = None) -> None:
+# Unsloth should be imported at the top for global patching
+from unsloth import FastLanguageModel
+
+def main(
+    experiment_name: str,
+    output_dir: str,
+    seed: int,
+    base_model_id: str,
+    lora_r: int,
+    lora_alpha: int,
+    lora_dropout: float, # Added lora_dropout
+    lora_target_modules: tp.List[str],
+    mode: str,
+    dataset_path: str,
+    max_seq_length: int,
+    num_epochs: int,
+    batch_size: int,
+    grad_accum_steps: int,
+    optimizer: str,
+    learning_rate: float,
+    lr_scheduler_type: str,
+    unsupervised_lora_path: tp.Optional[str] = None,
+    warmup_steps: tp.Optional[int] = None,
+    weight_decay: tp.Optional[float] = None,
+    logging_steps: int = 25,
+    save_steps: int = 250,
+) -> None:
     """주어진 데이터셋으로 Unsloth를 사용하여 언어 모델을 파인튜닝하는 메인 함수"""
 
-    # 1. Unsloth를 사용하여 모델 및 토크나이저 로드
-    model_id: str = base_model_path if base_model_path else config.LOCAL_MODEL_ID
-    max_seq_length = config.UNSLOTH_MAX_SEQ_LENGTH
+    set_seed(seed)
 
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name = model_id,
-        max_seq_length = max_seq_length,
-        dtype = torch.bfloat16,
-        load_in_4bit = True,
-    )
+    # 1. Unsloth를 사용하여 모델 및 토크나이저 로드
+    model_id: str = base_model_id
+
+    try:
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name = model_id,
+            max_seq_length = max_seq_length,
+            dtype = None, # Unsloth handles dtype internally
+            load_in_4bit = True,
+        )
+    except torch.cuda.OutOfMemoryError as e:
+        print(f"CUDA Out of Memory Error while loading Unsloth model {model_id}: {e}")
+        print("This model is too large for your GPU. Try a smaller model or free up VRAM.")
+        return
+    except Exception as e:
+        print(f"Error loading quantized model {model_id} with Unsloth: {e}")
+        return
+
+    # SFT를 위한 사전 병합 (선택 사항)
+    if unsupervised_lora_path and mode == 'sft':
+        print(f"Loading and merging unsupervised LoRA from {unsupervised_lora_path} before SFT...")
+        model = PeftModel.from_pretrained(model, unsupervised_lora_path)
+        model = model.merge_and_unload()
+        print("Unsupervised LoRA merged.")
 
     # 2. LoRA 설정
     model = FastLanguageModel.get_peft_model(
         model,
-        r = config.UNSLOTH_LORA_R,
-        lora_alpha = config.UNSLOTH_LORA_ALPHA,
-        target_modules = config.UNSLOTH_LORA_TARGET_MODULES,
-        lora_dropout = 0,
+        r = lora_r,
+        lora_alpha = lora_alpha,
+        target_modules = lora_target_modules,
+        lora_dropout = lora_dropout, # Use the passed lora_dropout
         bias = "none",
         use_gradient_checkpointing = True,
-        random_state = config.RANDOM_SEED,
+        random_state = seed,
         use_rslora = False,
         loftq_config = None,
     )
@@ -45,37 +86,54 @@ def main(dataset_path: str, mode: str, base_model_path: str = None) -> None:
     print(f"데이터셋 로딩 완료: {dataset}")
 
     # 4. 학습 파라미터 설정
-    output_dir = os.path.join(config.DEFAULT_OUTPUT_DIR, f"{os.path.splitext(os.path.basename(dataset_path))[0]}_unsloth_{mode}_finetuned")
     training_arguments: TrainingArguments = TrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size = config.UNSLOTH_TRAIN_BATCH_SIZE,
-        gradient_accumulation_steps = config.UNSLOTH_TRAIN_GRAD_ACCUM_STEPS,
-        warmup_steps = config.UNSLOTH_WARMUP_STEPS,
-        num_train_epochs = config.UNSLOTH_TRAIN_NUM_EPOCHS,
-        learning_rate = config.UNSLOTH_LEARNING_RATE,
+        per_device_train_batch_size = batch_size,
+        gradient_accumulation_steps = grad_accum_steps,
+        warmup_steps = warmup_steps,
+        num_train_epochs = num_epochs,
+        learning_rate = learning_rate,
         fp16 = not torch.cuda.is_bf16_supported(),
         bf16 = torch.cuda.is_bf16_supported(),
-        logging_steps = 1,
-        optim = config.UNSLOTH_OPTIMIZER,
-        weight_decay = config.UNSLOTH_WEIGHT_DECAY,
-        lr_scheduler_type = config.UNSLOTH_LR_SCHEDULER_TYPE,
-        seed = config.RANDOM_SEED,
+        logging_steps = logging_steps,
+        optim = optimizer,
+        weight_decay = weight_decay,
+        lr_scheduler_type = lr_scheduler_type,
+        seed = seed,
+        save_steps = save_steps,
     )
 
     # 5. SFTTrainer를 이용한 학습
+    trainer_kwargs = {}
+    if mode == 'unsupervised':
+        trainer_kwargs['dataset_text_field'] = 'text'
+    elif mode == 'sft':
+        # For SFT, the dataset is expected to be formatted with 'text' or 'formatted_text'
+        # SFTTrainer will handle this by default if the dataset is properly prepared.
+        pass
+    else:
+        raise ValueError(f"Unknown training mode: {mode}")
+
     trainer: SFTTrainer = SFTTrainer(
         model=model,
         train_dataset=dataset,
-        dataset_text_field="text",
         max_seq_length=max_seq_length,
         tokenizer=tokenizer,
         args=training_arguments,
+        **trainer_kwargs,
     )
 
     trainer.train()
 
     # 6. LoRA 어댑터 저장
-    final_model_path = os.path.join(config.DEFAULT_OUTPUT_DIR, f"{os.path.splitext(os.path.basename(dataset_path))[0]}_unsloth_{mode}_adapter")
-    trainer.save_model(final_model_path)
+    if mode == 'unsupervised':
+        adapter_name = "unsupervised_lora_adapter"
+    elif mode == 'sft':
+        adapter_name = "sft_lora_adapter"
+    else:
+        adapter_name = "adapter" # Fallback
 
-    print(f"Fine-tuning completed and LoRA adapter saved to {final_model_path}!")
+    final_adapter_path = os.path.join(output_dir, adapter_name)
+    trainer.save_model(final_adapter_path)
+
+    print(f"Fine-tuning completed and LoRA adapter saved to {final_adapter_path}! (Experiment: {experiment_name})")

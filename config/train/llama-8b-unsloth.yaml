@@ -1,0 +1,33 @@
+# configs/train/llama-8b-unsloth.yaml
+
+# General settings
+experiment_name: "llama-8b-unsloth"
+output_dir: "exp_results"
+seed: 42
+
+# Model settings
+model:
+  base_model_id: "MLP-KTLim/llama-3-Korean-Bllossom-8B"
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  lora_target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  unsupervised_lora_path: null # Optional: Path to unsupervised LoRA for pre-merge before SFT
+
+# Training settings
+# mode(sft, unsupervised)
+training:
+  mode: "sft" # Supervised Fine-tuning
+  use_unsloth: true
+  dataset_path: "data_result/gemini_generated_qa_dataset.jsonl"
+  max_seq_length: 2048
+  num_epochs: 3
+  batch_size: 2
+  grad_accum_steps: 4
+  optimizer: "adamw_torch"
+  learning_rate: 2e-4
+  lr_scheduler_type: "linear"
+  warmup_steps: 5
+  weight_decay: 0.01
+  logging_steps: 25
+  save_steps: 250

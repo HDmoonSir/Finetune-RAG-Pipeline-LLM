@@ -1,0 +1,7 @@
+# configs/data/build_vector_store.yaml
+
+input_dir: "data"
+vector_store_path: "data_result/vector_store"
+embedding_model_id: "sentence-transformers/all-MiniLM-L6-v2"
+text_splitter_chunk_size: 1000
+text_splitter_chunk_overlap: 100

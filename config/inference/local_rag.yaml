@@ -1,0 +1,34 @@
+# configs/inference/local_rag.yaml
+
+# Model settings
+model:
+  model_type: "local"
+  model_id: "MLP-KTLim/llama-3-Korean-Bllossom-8B"
+  unsupervised_lora_path: null # 비지도학습 LoRA 어댑터 경로
+  sft_lora_path: null # 지도학습 LoRA 어댑터 경로
+  embedding_model_id: "sentence-transformers/all-MiniLM-L6-v2"
+
+# Knowledge base settings
+knowledge_base_settings:
+  knowledge_base: "default" # 또는 "data_result/vector_store"
+  text_splitter_chunk_size: 1000
+  text_splitter_chunk_overlap: 100
+  retriever_search_k: 3
+  default_knowledge_base_dataset: "squad_kor_v1"
+
+# Generation settings
+generation:
+  rag_prompt_template: |
+    다음 컨텍스트 정보를 사용하여 질문에 답변해 주세요.
+    만약 컨텍스트에 답변이 없다면, 모른다고 답해 주세요.
+
+    컨텍스트:
+    {context}
+
+    질문:
+    {question}
+
+    답변:
+  max_new_tokens: 512
+  temperature: 0.1
+  model_max_seq_length: 2048 # Default for local-quantized models

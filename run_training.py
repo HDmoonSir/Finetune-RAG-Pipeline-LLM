@@ -1,46 +1,93 @@
-
 import argparse
-from src.training import train_llm, train_unsloth, merge_lora
-import config
+import os
+from datetime import datetime
+from omegaconf import OmegaConf
 
-def main():
-    parser = argparse.ArgumentParser(description="Model training and merging CLI.")
-    subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
+# Set CUDA_VISIBLE_DEVICES to restrict GPU visibility
+os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
 
-    # --- Base arguments for training ---
-    parent_parser = argparse.ArgumentParser(add_help=False)
-    parent_parser.add_argument("--dataset_path", type=str, required=True, help="Path to the .jsonl dataset file.")
-    parent_parser.add_argument(
-        "--mode", type=str, default='sft', choices=['sft', 'unsupervised'],
-        help="Training mode: 'sft' for supervised fine-tuning, 'unsupervised' for continued pre-training."
+from src.utils.config_loader import load_train_config, TrainConfig
+from src.training import train_llm, train_unsloth
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Model training CLI.")
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Path to the training configuration YAML file (e.g., configs/train/llama-8b-sft.yaml)"
     )
-
-    # --- Sub-parser for train_llm ---
-    parser_train = subparsers.add_parser("train", parents=[parent_parser], help="Fine-tune the model using the standard method.")
-    # Add any specific arguments for train_llm here if needed in the future
-
-    # --- Sub-parser for train_unsloth ---
-    parser_unsloth = subparsers.add_parser("train-unsloth", parents=[parent_parser], help="Fine-tune the model using Unsloth for optimization.")
-    # Add any specific arguments for train_unsloth here if needed in the future
-
-    # --- Sub-parser for merge_lora ---
-    parser_merge = subparsers.add_parser("merge", help="Merge a LoRA adapter into the base model.")
-    parser_merge.add_argument("--lora_path", type=str, required=True, help="Path to the LoRA adapter directory.")
-    parser_merge.add_argument("--output_dir", type=str, required=True, help="Directory to save the new, merged model.")
-    parser_merge.add_argument("--base_model_path", type=str, default=config.LOCAL_MODEL_ID, help=f"Base model to merge into. Defaults to {config.LOCAL_MODEL_ID}")
-
-
     args = parser.parse_args()
 
-    if args.command == "train":
-        print("Running standard training...")
-        train_llm.main(args)
-    elif args.command == "train-unsloth":
-        print("Running Unsloth training...")
-        train_unsloth.main(args)
-    elif args.command == "merge":
-        print("Merging LoRA adapter...")
-        merge_lora.main(args)
+    # Load the training configuration
+    config: TrainConfig = load_train_config(args.config)
+
+    # Create a unique output directory for this experiment
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    experiment_output_dir = os.path.join(
+        config.output_dir,
+        f"{config.experiment_name}_{timestamp}"
+    )
+    os.makedirs(experiment_output_dir, exist_ok=True)
+
+    # Save the resolved configuration to the experiment output directory for reproducibility
+    OmegaConf.save(config, os.path.join(experiment_output_dir, "config.yaml"))
+    print(f"Experiment results will be saved to: {experiment_output_dir}")
+
+    # Dispatch based on whether Unsloth is used
+    if config.training.use_unsloth:
+        print("Running training with Unsloth...")
+        train_unsloth.main(
+            experiment_name=config.experiment_name,
+            output_dir=experiment_output_dir, # Pass the specific output directory
+            seed=config.seed,
+            base_model_id=config.model.base_model_id,
+            unsupervised_lora_path=config.model.unsupervised_lora_path,
+            lora_r=config.model.lora_r,
+            lora_alpha=config.model.lora_alpha,
+            lora_dropout=config.model.lora_dropout, # Pass lora_dropout
+            lora_target_modules=config.model.lora_target_modules,
+            mode=config.training.mode, # Pass the training mode (sft/unsupervised)
+            dataset_path=config.training.dataset_path,
+            max_seq_length=config.training.max_seq_length,
+            num_epochs=config.training.num_epochs,
+            batch_size=config.training.batch_size,
+            grad_accum_steps=config.training.grad_accum_steps,
+            optimizer=config.training.optimizer,
+            learning_rate=config.training.learning_rate,
+            lr_scheduler_type=config.training.lr_scheduler_type,
+            warmup_steps=config.training.warmup_steps,
+            weight_decay=config.training.weight_decay,
+            logging_steps=config.training.logging_steps,
+            save_steps=config.training.save_steps,
+        )
+    else:
+        print("Running standard training (without Unsloth)...")
+        train_llm.main(
+            experiment_name=config.experiment_name,
+            output_dir=experiment_output_dir, # Pass the specific output directory
+            seed=config.seed,
+            base_model_id=config.model.base_model_id,
+            unsupervised_lora_path=config.model.unsupervised_lora_path,
+            lora_r=config.model.lora_r,
+            lora_alpha=config.model.lora_alpha,
+            lora_dropout=config.model.lora_dropout,
+            lora_target_modules=config.model.lora_target_modules,
+            mode=config.training.mode, # Pass the training mode (sft/unsupervised)
+            dataset_path=config.training.dataset_path,
+            max_seq_length=config.training.max_seq_length,
+            num_epochs=config.training.num_epochs,
+            batch_size=config.training.batch_size,
+            grad_accum_steps=config.training.grad_accum_steps,
+            optimizer=config.training.optimizer,
+            learning_rate=config.training.learning_rate,
+            lr_scheduler_type=config.training.lr_scheduler_type,
+            warmup_ratio=config.training.warmup_ratio,
+            warmup_steps=config.training.warmup_steps,
+            weight_decay=config.training.weight_decay,
+            logging_steps=config.training.logging_steps,
+            save_steps=config.training.save_steps,
+        )
 
 if __name__ == "__main__":
     main()

@@ -39,3 +39,4 @@ tqdm
 evaluate
 rouge_score
 pandas
+omegaconf
