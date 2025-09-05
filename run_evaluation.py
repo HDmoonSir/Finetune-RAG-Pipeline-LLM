@@ -3,11 +3,14 @@ import os
 from datetime import datetime
 from omegaconf import OmegaConf
 
-# Set CUDA_VISIBLE_DEVICES to restrict GPU visibility
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
-
-from src.utils.config_loader import load_eval_config, load_train_config, EvalConfig, TrainConfig
+from src.utils.config_loader import (
+    load_eval_config,
+    load_train_config,
+    EvalConfig,
+    TrainConfig,
+)
 from src.evaluation import evaluate_rag
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluation CLI for the project.")
@@ -15,13 +18,13 @@ def main() -> None:
         "--config",
         type=str,
         required=True,
-        help="Path to the evaluation configuration YAML file (e.g., configs/eval/default_eval.yaml)"
+        help="Path to the evaluation configuration YAML file (e.g., configs/eval/default_eval.yaml)",
     )
     parser.add_argument(
         "--train_experiment_dir",
         type=str,
         default=None,
-        help="Optional: Path to a completed training experiment directory. If provided, model_id and lora_path will be loaded from its config.yaml."
+        help="Optional: Path to a completed training experiment directory. If provided, model_id and lora_path will be loaded from its config.yaml.",
     )
     args = parser.parse_args()
 
@@ -30,18 +33,24 @@ def main() -> None:
 
     # If a training experiment directory is provided, override model settings
     if args.train_experiment_dir:
-        print(f"Loading model configuration from training experiment: {args.train_experiment_dir}")
+        print(
+            f"Loading model configuration from training experiment: {args.train_experiment_dir}"
+        )
         train_config_path = os.path.join(args.train_experiment_dir, "config.yaml")
         if not os.path.exists(train_config_path):
-            raise FileNotFoundError(f"Training config not found in experiment directory: {train_config_path}")
+            raise FileNotFoundError(
+                f"Training config not found in experiment directory: {train_config_path}"
+            )
 
         train_config: TrainConfig = load_train_config(train_config_path)
-        
+
         eval_config.model.model_id = train_config.model.base_model_id
         print(f"Overridden model_id: {eval_config.model.model_id}")
 
         # Check for unsupervised adapter
-        unsupervised_adapter_path = os.path.join(args.train_experiment_dir, "unsupervised_lora_adapter")
+        unsupervised_adapter_path = os.path.join(
+            args.train_experiment_dir, "unsupervised_lora_adapter"
+        )
         if os.path.exists(unsupervised_adapter_path):
             eval_config.model.unsupervised_lora_path = unsupervised_adapter_path
             print(f"Found and set unsupervised_lora_path: {unsupervised_adapter_path}")
@@ -57,9 +66,7 @@ def main() -> None:
     # Fix: Assign model_id_safe to a variable before using in f-string
     model_id_safe = eval_config.model.model_id.replace("/", "_")
     eval_output_dir = os.path.join(
-        "exp_results",
-        "evaluation_results",
-        f"eval_{model_id_safe}_{timestamp}"
+        "exp_results", "evaluation_results", f"eval_{model_id_safe}_{timestamp}"
     )
     os.makedirs(eval_output_dir, exist_ok=True)
     print(f"Evaluation results will be saved to: {eval_output_dir}")
@@ -85,8 +92,9 @@ def main() -> None:
         model_max_seq_length=eval_config.generation.model_max_seq_length,
         eval_dataset_path=eval_config.eval_dataset_path,
         num_samples=eval_config.num_samples,
-        output_base_dir=eval_output_dir
+        output_base_dir=eval_output_dir,
     )
+
 
 if __name__ == "__main__":
     main()

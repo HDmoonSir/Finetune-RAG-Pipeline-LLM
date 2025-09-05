@@ -1,10 +1,16 @@
 import os
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, set_seed
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    TrainingArguments,
+    set_seed,
+)
 from peft import LoraConfig, get_peft_model, PeftModel
 from datasets import load_dataset
 from trl import SFTTrainer
 import typing as tp
+
 
 def main(
     experiment_name: str,
@@ -45,12 +51,14 @@ def main(
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         torch_dtype=torch.bfloat16,
-        device_map={'': torch.cuda.current_device()},
+        device_map={"": torch.cuda.current_device()},
     )
 
     # 2. SFT를 위한 사전 병합 (선택 사항)
-    if unsupervised_lora_path and mode == 'sft':
-        print(f"Loading and merging unsupervised LoRA from {unsupervised_lora_path} before SFT...")
+    if unsupervised_lora_path and mode == "sft":
+        print(
+            f"Loading and merging unsupervised LoRA from {unsupervised_lora_path} before SFT..."
+        )
         model = PeftModel.from_pretrained(model, unsupervised_lora_path)
         model = model.merge_and_unload()
         print("Unsupervised LoRA merged.")
@@ -98,17 +106,19 @@ def main(
         training_arguments_kwargs["warmup_ratio"] = warmup_ratio
     elif warmup_steps is not None:
         training_arguments_kwargs["warmup_steps"] = warmup_steps
-    
+
     if weight_decay is not None:
         training_arguments_kwargs["weight_decay"] = weight_decay
 
-    training_arguments: TrainingArguments = TrainingArguments(**training_arguments_kwargs)
+    training_arguments: TrainingArguments = TrainingArguments(
+        **training_arguments_kwargs
+    )
 
     # 5. SFTTrainer를 이용한 학습
     trainer_kwargs = {}
-    if mode == 'unsupervised':
-        trainer_kwargs['dataset_text_field'] = 'text'
-    elif mode == 'sft':
+    if mode == "unsupervised":
+        trainer_kwargs["dataset_text_field"] = "text"
+    elif mode == "sft":
         # For SFT, the dataset is expected to be formatted with 'text' or 'formatted_text'
         # SFTTrainer will handle this by default if the dataset is properly prepared.
         # No need to set dataset_text_field explicitly unless it's a custom field.
@@ -128,14 +138,16 @@ def main(
     trainer.train()
 
     # 6. LoRA 어댑터 저장
-    if mode == 'unsupervised':
+    if mode == "unsupervised":
         adapter_name = "unsupervised_lora_adapter"
-    elif mode == 'sft':
+    elif mode == "sft":
         adapter_name = "sft_lora_adapter"
     else:
-        adapter_name = "adapter" # Fallback
+        adapter_name = "adapter"  # Fallback
 
     final_adapter_path = os.path.join(output_dir, adapter_name)
     trainer.save_model(final_adapter_path)
 
-    print(f"Fine-tuning completed and LoRA adapter saved to {final_adapter_path}! (Experiment: {experiment_name})")
+    print(
+        f"Fine-tuning completed and LoRA adapter saved to {final_adapter_path}! (Experiment: {experiment_name})"
+    )

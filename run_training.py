@@ -3,11 +3,9 @@ import os
 from datetime import datetime
 from omegaconf import OmegaConf
 
-# Set CUDA_VISIBLE_DEVICES to restrict GPU visibility
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
-
 from src.utils.config_loader import load_train_config, TrainConfig
 from src.training import train_llm, train_unsloth
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Model training CLI.")
@@ -15,7 +13,7 @@ def main() -> None:
         "--config",
         type=str,
         required=True,
-        help="Path to the training configuration YAML file (e.g., configs/train/llama-8b-sft.yaml)"
+        help="Path to the training configuration YAML file (e.g., configs/train/llama-8b-sft.yaml)",
     )
     args = parser.parse_args()
 
@@ -25,8 +23,7 @@ def main() -> None:
     # Create a unique output directory for this experiment
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     experiment_output_dir = os.path.join(
-        config.output_dir,
-        f"{config.experiment_name}_{timestamp}"
+        config.output_dir, f"{config.experiment_name}_{timestamp}"
     )
     os.makedirs(experiment_output_dir, exist_ok=True)
 
@@ -39,15 +36,15 @@ def main() -> None:
         print("Running training with Unsloth...")
         train_unsloth.main(
             experiment_name=config.experiment_name,
-            output_dir=experiment_output_dir, # Pass the specific output directory
+            output_dir=experiment_output_dir,  # Pass the specific output directory
             seed=config.seed,
             base_model_id=config.model.base_model_id,
             unsupervised_lora_path=config.model.unsupervised_lora_path,
             lora_r=config.model.lora_r,
             lora_alpha=config.model.lora_alpha,
-            lora_dropout=config.model.lora_dropout, # Pass lora_dropout
+            lora_dropout=config.model.lora_dropout,  # Pass lora_dropout
             lora_target_modules=config.model.lora_target_modules,
-            mode=config.training.mode, # Pass the training mode (sft/unsupervised)
+            mode=config.training.mode,  # Pass the training mode (sft/unsupervised)
             dataset_path=config.training.dataset_path,
             max_seq_length=config.training.max_seq_length,
             num_epochs=config.training.num_epochs,
@@ -65,7 +62,7 @@ def main() -> None:
         print("Running standard training (without Unsloth)...")
         train_llm.main(
             experiment_name=config.experiment_name,
-            output_dir=experiment_output_dir, # Pass the specific output directory
+            output_dir=experiment_output_dir,  # Pass the specific output directory
             seed=config.seed,
             base_model_id=config.model.base_model_id,
             unsupervised_lora_path=config.model.unsupervised_lora_path,
@@ -73,7 +70,7 @@ def main() -> None:
             lora_alpha=config.model.lora_alpha,
             lora_dropout=config.model.lora_dropout,
             lora_target_modules=config.model.lora_target_modules,
-            mode=config.training.mode, # Pass the training mode (sft/unsupervised)
+            mode=config.training.mode,  # Pass the training mode (sft/unsupervised)
             dataset_path=config.training.dataset_path,
             max_seq_length=config.training.max_seq_length,
             num_epochs=config.training.num_epochs,
@@ -88,6 +85,7 @@ def main() -> None:
             logging_steps=config.training.logging_steps,
             save_steps=config.training.save_steps,
         )
+
 
 if __name__ == "__main__":
     main()

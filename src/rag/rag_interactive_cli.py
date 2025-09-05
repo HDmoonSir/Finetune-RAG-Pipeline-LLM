@@ -8,6 +8,7 @@ from src.rag.rag_pipeline import load_llm, setup_retriever, create_rag_chain
 # 토크나이저 병렬 처리 비활성화
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+
 def main(
     model_type: str,
     model_id: str,
@@ -32,7 +33,7 @@ def main(
             lora_path=lora_path,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
-            model_max_seq_length=model_max_seq_length
+            model_max_seq_length=model_max_seq_length,
         )
         if llm_pipeline is None:
             print("Model loading failed. Aborting RAG interactive CLI.")
@@ -45,7 +46,7 @@ def main(
             text_splitter_chunk_size=text_splitter_chunk_size,
             text_splitter_chunk_overlap=text_splitter_chunk_overlap,
             retriever_search_k=retriever_search_k,
-            default_knowledge_base_dataset=default_knowledge_base_dataset
+            default_knowledge_base_dataset=default_knowledge_base_dataset,
         )
         print("Retriever setup successfully.")
 

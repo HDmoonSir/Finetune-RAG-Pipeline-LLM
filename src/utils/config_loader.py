@@ -13,6 +13,7 @@ class BaseModelSettings:
     unsupervised_lora_path: tp.Optional[str] = None
     sft_lora_path: tp.Optional[str] = None
 
+
 @dataclasses.dataclass
 class TrainModelSettings:
     base_model_id: str
@@ -20,11 +21,12 @@ class TrainModelSettings:
     lora_alpha: int
     lora_dropout: float
     lora_target_modules: tp.List[str]
-    unsupervised_lora_path: tp.Optional[str] = None # SFT 시에만 사용
+    unsupervised_lora_path: tp.Optional[str] = None  # SFT 시에만 사용
+
 
 @dataclasses.dataclass
 class TrainingSettings:
-    mode: str # "sft" or "unsupervised"
+    mode: str  # "sft" or "unsupervised"
     use_unsloth: bool
     dataset_path: str
     max_seq_length: int
@@ -40,12 +42,14 @@ class TrainingSettings:
     warmup_steps: tp.Optional[int] = None
     weight_decay: tp.Optional[float] = None
 
+
 @dataclasses.dataclass
 class GenerationSettings:
     max_new_tokens: int
     temperature: float
     model_max_seq_length: int
     rag_prompt_template: tp.Optional[str] = None
+
 
 @dataclasses.dataclass
 class KnowledgeBaseSettings:
@@ -54,6 +58,7 @@ class KnowledgeBaseSettings:
     text_splitter_chunk_overlap: int
     retriever_search_k: int
     default_knowledge_base_dataset: str
+
 
 # --- Main Configs --- #
 @dataclasses.dataclass
@@ -64,6 +69,7 @@ class TrainConfig:
     model: TrainModelSettings
     training: TrainingSettings
 
+
 @dataclasses.dataclass
 class EvalConfig:
     eval_dataset_path: str
@@ -72,11 +78,13 @@ class EvalConfig:
     generation: GenerationSettings
     knowledge_base_settings: KnowledgeBaseSettings
 
+
 @dataclasses.dataclass
 class InferenceConfig:
     model: BaseModelSettings
     generation: GenerationSettings
     knowledge_base_settings: KnowledgeBaseSettings
+
 
 @dataclasses.dataclass
 class DataPreprocessingConfig:
@@ -90,6 +98,7 @@ class DataPreprocessingConfig:
     unsupervised_dataset_path: str
     default_output_dir: str
 
+
 @dataclasses.dataclass
 class VectorStoreBuildConfig:
     input_dir: str
@@ -98,7 +107,25 @@ class VectorStoreBuildConfig:
     text_splitter_chunk_size: int
     text_splitter_chunk_overlap: int
 
-def load_config(config_path: str, config_type: tp.Type[tp.Union[TrainConfig, EvalConfig, InferenceConfig, DataPreprocessingConfig, VectorStoreBuildConfig]]) -> tp.Union[TrainConfig, EvalConfig, InferenceConfig, DataPreprocessingConfig, VectorStoreBuildConfig]:
+
+def load_config(
+    config_path: str,
+    config_type: tp.Type[
+        tp.Union[
+            TrainConfig,
+            EvalConfig,
+            InferenceConfig,
+            DataPreprocessingConfig,
+            VectorStoreBuildConfig,
+        ]
+    ],
+) -> tp.Union[
+    TrainConfig,
+    EvalConfig,
+    InferenceConfig,
+    DataPreprocessingConfig,
+    VectorStoreBuildConfig,
+]:
     """
     Loads a YAML configuration file and converts it into a structured dataclass.
 
@@ -125,27 +152,37 @@ def load_config(config_path: str, config_type: tp.Type[tp.Union[TrainConfig, Eva
 
         # Perform custom validation for TrainConfig
         if config_type is TrainConfig:
-            if merged_cfg.training.warmup_ratio is not None and merged_cfg.training.warmup_steps is not None:
-                raise ValueError("Cannot specify both 'warmup_ratio' and 'warmup_steps' in training configuration. Please choose one.")
+            if (
+                merged_cfg.training.warmup_ratio is not None
+                and merged_cfg.training.warmup_steps is not None
+            ):
+                raise ValueError(
+                    "Cannot specify both 'warmup_ratio' and 'warmup_steps' in training configuration. Please choose one."
+                )
 
         # Convert the merged DictConfig to the dataclass instance
-        return OmegaConf.to_object(merged_cfg) # Call with only one argument
+        return OmegaConf.to_object(merged_cfg)  # Call with only one argument
     except FileNotFoundError:
         raise FileNotFoundError(f"Configuration file not found at: {config_path}")
     except Exception as e:
         raise Exception(f"Error loading or structuring config from {config_path}: {e}")
 
+
 def load_train_config(config_path: str) -> TrainConfig:
-    return load_config(config_path, TrainConfig) # type: ignore
+    return load_config(config_path, TrainConfig)  # type: ignore
+
 
 def load_eval_config(config_path: str) -> EvalConfig:
-    return load_config(config_path, EvalConfig) # type: ignore
+    return load_config(config_path, EvalConfig)  # type: ignore
+
 
 def load_inference_config(config_path: str) -> InferenceConfig:
-    return load_config(config_path, InferenceConfig) # type: ignore
+    return load_config(config_path, InferenceConfig)  # type: ignore
+
 
 def load_data_preprocessing_config(config_path: str) -> DataPreprocessingConfig:
-    return load_config(config_path, DataPreprocessingConfig) # type: ignore
+    return load_config(config_path, DataPreprocessingConfig)  # type: ignore
+
 
 def load_vector_store_build_config(config_path: str) -> VectorStoreBuildConfig:
-    return load_config(config_path, VectorStoreBuildConfig) # type: ignore
+    return load_config(config_path, VectorStoreBuildConfig)  # type: ignore
