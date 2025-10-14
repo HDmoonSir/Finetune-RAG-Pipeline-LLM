@@ -5,11 +5,10 @@ from omegaconf import OmegaConf
 
 from src.utils.config_loader import (
     load_eval_config,
-    load_train_config,
     EvalConfig,
-    TrainConfig,
 )
 from src.evaluation import evaluate_rag
+from src.inference.experiment_loader import update_config_from_experiment
 
 
 def main() -> None:
@@ -33,33 +32,9 @@ def main() -> None:
 
     # If a training experiment directory is provided, override model settings
     if args.train_experiment_dir:
-        print(
-            f"Loading model configuration from training experiment: {args.train_experiment_dir}"
+        eval_config = update_config_from_experiment(
+            config=eval_config, train_experiment_dir=args.train_experiment_dir
         )
-        train_config_path = os.path.join(args.train_experiment_dir, "config.yaml")
-        if not os.path.exists(train_config_path):
-            raise FileNotFoundError(
-                f"Training config not found in experiment directory: {train_config_path}"
-            )
-
-        train_config: TrainConfig = load_train_config(train_config_path)
-
-        eval_config.model.model_id = train_config.model.base_model_id
-        print(f"Overridden model_id: {eval_config.model.model_id}")
-
-        # Check for unsupervised adapter
-        unsupervised_adapter_path = os.path.join(
-            args.train_experiment_dir, "unsupervised_lora_adapter"
-        )
-        if os.path.exists(unsupervised_adapter_path):
-            eval_config.model.unsupervised_lora_path = unsupervised_adapter_path
-            print(f"Found and set unsupervised_lora_path: {unsupervised_adapter_path}")
-
-        # Check for sft adapter
-        sft_adapter_path = os.path.join(args.train_experiment_dir, "sft_lora_adapter")
-        if os.path.exists(sft_adapter_path):
-            eval_config.model.sft_lora_path = sft_adapter_path
-            print(f"Found and set sft_lora_path: {sft_adapter_path}")
 
     # Create a unique output directory for evaluation results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
