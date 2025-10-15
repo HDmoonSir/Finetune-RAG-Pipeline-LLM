@@ -60,41 +60,10 @@ def main() -> None:
 
     if args.command == "pipeline":
         print("Running RAG pipeline...")
-        rag_pipeline.main(
-            model_type=inference_config.model.model_type,
-            model_id=inference_config.model.model_id,
-            unsupervised_lora_path=inference_config.model.unsupervised_lora_path,
-            sft_lora_path=inference_config.model.sft_lora_path,
-            embedding_model_id=inference_config.model.embedding_model_id,
-            knowledge_base=inference_config.knowledge_base_settings.knowledge_base,
-            text_splitter_chunk_size=inference_config.knowledge_base_settings.text_splitter_chunk_size,
-            text_splitter_chunk_overlap=inference_config.knowledge_base_settings.text_splitter_chunk_overlap,
-            retriever_search_k=inference_config.knowledge_base_settings.retriever_search_k,
-            rag_prompt_template=inference_config.generation.rag_prompt_template,
-            max_new_tokens=inference_config.generation.max_new_tokens,
-            temperature=inference_config.generation.temperature,
-            model_max_seq_length=inference_config.generation.model_max_seq_length,
-            question=args.question,
-            default_knowledge_base_dataset=inference_config.knowledge_base_settings.default_knowledge_base_dataset,
-        )
+        rag_pipeline.main(cfg=inference_config, question=args.question)
     elif args.command == "cli":
         print("Starting RAG interactive CLI...")
-        rag_interactive_cli.main(
-            model_type=inference_config.model.model_type,
-            model_id=inference_config.model.model_id,
-            unsupervised_lora_path=inference_config.model.unsupervised_lora_path,
-            sft_lora_path=inference_config.model.sft_lora_path,
-            embedding_model_id=inference_config.model.embedding_model_id,
-            knowledge_base=inference_config.knowledge_base_settings.knowledge_base,
-            text_splitter_chunk_size=inference_config.knowledge_base_settings.text_splitter_chunk_size,
-            text_splitter_chunk_overlap=inference_config.knowledge_base_settings.text_splitter_chunk_overlap,
-            retriever_search_k=inference_config.knowledge_base_settings.retriever_search_k,
-            rag_prompt_template=inference_config.generation.rag_prompt_template,
-            max_new_tokens=inference_config.generation.max_new_tokens,
-            temperature=inference_config.generation.temperature,
-            model_max_seq_length=inference_config.generation.model_max_seq_length,
-            default_knowledge_base_dataset=inference_config.knowledge_base_settings.default_knowledge_base_dataset,
-        )
+        rag_interactive_cli.main(cfg=inference_config)
 
 
 if __name__ == "__main__":

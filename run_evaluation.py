@@ -49,26 +49,11 @@ def main() -> None:
     # Save the resolved evaluation configuration to the output directory for reproducibility
     OmegaConf.save(eval_config, os.path.join(eval_output_dir, "eval_config.yaml"))
 
+    # Overwrite the output_dir in cfg with the dynamic experiment_output_dir
+    eval_config.output_dir = eval_output_dir
+
     print("Running RAG evaluation...")
-    evaluate_rag.main(
-        model_type=eval_config.model.model_type,
-        model_id=eval_config.model.model_id,
-        unsupervised_lora_path=eval_config.model.unsupervised_lora_path,
-        sft_lora_path=eval_config.model.sft_lora_path,
-        embedding_model_id=eval_config.model.embedding_model_id,
-        knowledge_base=eval_config.knowledge_base_settings.knowledge_base,
-        text_splitter_chunk_size=eval_config.knowledge_base_settings.text_splitter_chunk_size,
-        text_splitter_chunk_overlap=eval_config.knowledge_base_settings.text_splitter_chunk_overlap,
-        retriever_search_k=eval_config.knowledge_base_settings.retriever_search_k,
-        default_knowledge_base_dataset=eval_config.knowledge_base_settings.default_knowledge_base_dataset,
-        rag_prompt_template=eval_config.generation.rag_prompt_template,
-        max_new_tokens=eval_config.generation.max_new_tokens,
-        temperature=eval_config.generation.temperature,
-        model_max_seq_length=eval_config.generation.model_max_seq_length,
-        eval_dataset_path=eval_config.eval_dataset_path,
-        num_samples=eval_config.num_samples,
-        output_base_dir=eval_output_dir,
-    )
+    evaluate_rag.main(cfg=eval_config)
 
 
 if __name__ == "__main__":

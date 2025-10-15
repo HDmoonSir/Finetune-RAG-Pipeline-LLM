@@ -46,30 +46,16 @@ def parse_qa_from_text(text: str) -> tp.Optional[tp.Dict[str, str]]:
         return None
 
 
-def main(
-    model_type: str,
-    model_id: str,
-    lora_path: tp.Optional[str],
-    embedding_model_id: str,
-    knowledge_base: str,
-    text_splitter_chunk_size: int,
-    text_splitter_chunk_overlap: int,
-    retriever_search_k: int,
-    default_knowledge_base_dataset: str,
-    rag_prompt_template: str,
-    max_new_tokens: int,
-    temperature: float,
-    model_max_seq_length: int,
-    eval_dataset_path: str,
-    num_samples: int,
-    output_base_dir: str,
-) -> None:
+from src.utils.config_loader import EvalConfig
+
+
+def main(cfg: EvalConfig) -> None:
     """Runs the full RAG evaluation process."""
 
     # 1. Load evaluation dataset
-    print(f"Loading evaluation dataset from: {eval_dataset_path}")
+    print(f"Loading evaluation dataset from: {cfg.eval_dataset_path}")
     eval_data = list()
-    with open(eval_dataset_path, "r", encoding="utf-8") as f:
+    with open(cfg.eval_dataset_path, "r", encoding="utf-8") as f:
         for line in f:
             data = json.loads(line)
             parsed_qa = parse_qa_from_text(data["text"])
@@ -81,29 +67,30 @@ def main(
         return
 
     # Limit number of samples if requested
-    if num_samples > 0:
-        eval_data = eval_data[:num_samples]
+    if cfg.num_samples > 0:
+        eval_data = eval_data[: cfg.num_samples]
     print(f"Loaded {len(eval_data)} samples for evaluation.")
 
     # 2. Load the RAG chain
     print("\n--- Loading RAG Pipeline ---")
     llm = load_llm(
-        model_type=model_type,
-        model_id=model_id,
-        lora_path=lora_path,
-        max_new_tokens=max_new_tokens,
-        temperature=temperature,
-        model_max_seq_length=model_max_seq_length,
+        model_type=cfg.model.model_type,
+        model_id=cfg.model.model_id,
+        unsupervised_lora_path=cfg.model.unsupervised_lora_path,
+        sft_lora_path=cfg.model.sft_lora_path,
+        max_new_tokens=cfg.generation.max_new_tokens,
+        temperature=cfg.generation.temperature,
+        model_max_seq_length=cfg.generation.model_max_seq_length,
     )
     retriever = setup_retriever(
-        knowledge_base_path=knowledge_base,
-        embedding_model_id=embedding_model_id,
-        text_splitter_chunk_size=text_splitter_chunk_size,
-        text_splitter_chunk_overlap=text_splitter_chunk_overlap,
-        retriever_search_k=retriever_search_k,
-        default_knowledge_base_dataset=default_knowledge_base_dataset,
+        knowledge_base_path=cfg.knowledge_base_settings.knowledge_base,
+        embedding_model_id=cfg.model.embedding_model_id,
+        text_splitter_chunk_size=cfg.knowledge_base_settings.text_splitter_chunk_size,
+        text_splitter_chunk_overlap=cfg.knowledge_base_settings.text_splitter_chunk_overlap,
+        retriever_search_k=cfg.knowledge_base_settings.retriever_search_k,
+        default_knowledge_base_dataset=cfg.knowledge_base_settings.default_knowledge_base_dataset,
     )
-    rag_chain = create_rag_chain(llm, retriever, rag_prompt_template)
+    rag_chain = create_rag_chain(llm, retriever, cfg.generation.rag_prompt_template)
     print("--- RAG Pipeline Loaded ---\n")
 
     # 3. Run inference and collect results
@@ -139,8 +126,8 @@ def main(
     print(f"  BLEU: {bleu_results['bleu']:.4f}")
 
     # 5. Save results to a file for inspection
-    results_filename = os.path.join(output_base_dir, "evaluation_results.csv")
-    os.makedirs(output_base_dir, exist_ok=True)
+    results_filename = os.path.join(cfg.output_dir, "evaluation_results.csv")
+    os.makedirs(cfg.output_dir, exist_ok=True)
     results_df = pd.DataFrame(
         {
             "question": [item["question"] for item in eval_data],
@@ -152,14 +139,15 @@ def main(
     print(f"\nDetailed results saved to: {results_filename}")
 
     # 6. Save metrics to a file
-    metrics_filename = os.path.join(output_base_dir, "evaluation_metrics.json")
+    metrics_filename = os.path.join(cfg.output_dir, "evaluation_metrics.json")
     metrics_summary = {
-        "model_type": model_type,
-        "model_id": model_id,
-        "lora_path": lora_path,
-        "embedding_model_id": embedding_model_id,
-        "knowledge_base": knowledge_base,
-        "eval_dataset_path": eval_dataset_path,
+        "model_type": cfg.model.model_type,
+        "model_id": cfg.model.model_id,
+        "unsupervised_lora_path": cfg.model.unsupervised_lora_path,
+        "sft_lora_path": cfg.model.sft_lora_path,
+        "embedding_model_id": cfg.model.embedding_model_id,
+        "knowledge_base": cfg.knowledge_base_settings.knowledge_base,
+        "eval_dataset_path": cfg.eval_dataset_path,
         "num_samples": len(predictions),
         "rouge": rouge_results,
         "bleu": bleu_results,

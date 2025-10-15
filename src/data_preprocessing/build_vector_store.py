@@ -10,19 +10,15 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from tqdm import tqdm
 
 
-def build_vector_store(
-    input_dir: str,
-    vector_store_path: str,
-    embedding_model_id: str,
-    text_splitter_chunk_size: int,
-    text_splitter_chunk_overlap: int,
-) -> None:
+from src.utils.config_loader import VectorStoreBuildConfig
+
+def build_vector_store(cfg: VectorStoreBuildConfig) -> None:
     """Builds a FAISS vector store from JSONL files in the input directory."""
 
-    print(f"🔍 Reading JSONL files from: {input_dir}")
+    print(f"🔍 Reading JSONL files from: {cfg.input_dir}")
     jsonl_paths = sorted(
-        glob.glob(os.path.join(input_dir, "**/*.jsonl"), recursive=True)
-        + glob.glob(os.path.join(input_dir, "*.jsonl"))
+        glob.glob(os.path.join(cfg.input_dir, "**/*.jsonl"), recursive=True)
+        + glob.glob(os.path.join(cfg.input_dir, "*.jsonl"))
     )
 
     if not jsonl_paths:
@@ -52,34 +48,22 @@ def build_vector_store(
 
     print("Splitting documents into chunks...")
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=text_splitter_chunk_size, chunk_overlap=text_splitter_chunk_overlap
+        chunk_size=cfg.text_splitter_chunk_size, chunk_overlap=cfg.text_splitter_chunk_overlap
     )
     splits = text_splitter.split_documents(documents)
     print(f"Documents split into {len(splits)} chunks.")
 
-    print(f"Initializing embedding model: {embedding_model_id}")
-    embeddings = HuggingFaceEmbeddings(model_name=embedding_model_id)
+    print(f"Initializing embedding model: {cfg.embedding_model_id}")
+    embeddings = HuggingFaceEmbeddings(model_name=cfg.embedding_model_id)
 
     print("Building FAISS vector store... (This may take a while)")
     vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
 
-    os.makedirs(os.path.dirname(vector_store_path), exist_ok=True)
-    vectorstore.save_local(vector_store_path)
+    os.makedirs(os.path.dirname(cfg.vector_store_path), exist_ok=True)
+    vectorstore.save_local(cfg.vector_store_path)
 
-    print(f"✅ Vector store successfully built and saved to: {vector_store_path}")
+    print(f"✅ Vector store successfully built and saved to: {cfg.vector_store_path}")
 
 
-def main(
-    input_dir: str,
-    vector_store_path: str,
-    embedding_model_id: str,
-    text_splitter_chunk_size: int,
-    text_splitter_chunk_overlap: int,
-) -> None:
-    build_vector_store(
-        input_dir=input_dir,
-        vector_store_path=vector_store_path,
-        embedding_model_id=embedding_model_id,
-        text_splitter_chunk_size=text_splitter_chunk_size,
-        text_splitter_chunk_overlap=text_splitter_chunk_overlap,
-    )
+def main(cfg: VectorStoreBuildConfig) -> None:
+    build_vector_store(cfg=cfg)

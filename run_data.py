@@ -79,27 +79,11 @@ def main():
     elif args.command == "preprocess-gemini":
         print("Running Gemini preprocessing...")
         config: DataPreprocessingConfig = load_data_preprocessing_config(args.config)
-        preprocess_with_gemini.main(
-            mode=config.mode,
-            gemini_preprocess_model=config.gemini_preprocess_model,
-            data_dir=config.data_dir,
-            text_page_batch_size=config.text_page_batch_size,
-            qa_prompt_template=config.qa_prompt_template,
-            unsupervised_prompt_template=config.unsupervised_prompt_template,
-            qa_dataset_path=config.qa_dataset_path,
-            unsupervised_dataset_path=config.unsupervised_dataset_path,
-            default_output_dir=config.default_output_dir,
-        )
+        preprocess_with_gemini.main(cfg=config)
     elif args.command == "build-db":
         print("Building vector store...")
         config: VectorStoreBuildConfig = load_vector_store_build_config(args.config)
-        build_vector_store.main(
-            input_dir=config.input_dir,
-            vector_store_path=config.vector_store_path,
-            embedding_model_id=config.embedding_model_id,
-            text_splitter_chunk_size=config.text_splitter_chunk_size,
-            text_splitter_chunk_overlap=config.text_splitter_chunk_overlap,
-        )
+        build_vector_store.main(cfg=config)
 
 
 if __name__ == "__main__":

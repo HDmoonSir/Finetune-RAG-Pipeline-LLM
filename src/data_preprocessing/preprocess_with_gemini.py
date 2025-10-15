@@ -79,22 +79,14 @@ def format_for_llama3(
     return formatted_data
 
 
-def main(
-    mode: str,
-    gemini_preprocess_model: str,
-    data_dir: str,
-    text_page_batch_size: int,
-    qa_prompt_template: str,
-    unsupervised_prompt_template: str,
-    qa_dataset_path: str,
-    unsupervised_dataset_path: str,
-    default_output_dir: str,
-) -> None:
-    print(f"🚀'{mode}' 모드로 데이터 생성을 시작합니다.")
+from src.utils.config_loader import DataPreprocessingConfig
+
+def main(cfg: DataPreprocessingConfig) -> None:
+    print(f"🚀'{cfg.mode}' 모드로 데이터 생성을 시작합니다.")
 
     jsonl_paths: tp.List[str] = glob.glob(
-        os.path.join(data_dir, "**/*.jsonl"), recursive=True
-    ) + glob.glob(os.path.join(data_dir, "*.jsonl"))
+        os.path.join(cfg.data_dir, "**/*.jsonl"), recursive=True
+    ) + glob.glob(os.path.join(cfg.data_dir, "*.jsonl"))
     jsonl_paths = sorted(list(set(jsonl_paths)))
 
     if not jsonl_paths:
@@ -131,26 +123,26 @@ def main(
         if not page_texts:
             continue
 
-        num_batches: int = math.ceil(len(page_texts) / text_page_batch_size)
+        num_batches: int = math.ceil(len(page_texts) / cfg.text_page_batch_size)
         for i in tqdm(
             range(num_batches), desc=f"{os.path.basename(pdf_name)} 처리 진행률"
         ):
             batch_texts: tp.List[str] = page_texts[
-                i * text_page_batch_size : (i + 1) * text_page_batch_size
+                i * cfg.text_page_batch_size : (i + 1) * cfg.text_page_batch_size
             ]
             combined_text: str = "\n\n---\n\n".join(batch_texts)
 
-            if mode == "qa":
-                prompt: str = qa_prompt_template.format(text=combined_text)
+            if cfg.mode == "qa":
+                prompt: str = cfg.qa_prompt_template.format(text=combined_text)
                 result: tp.Optional[tp.List[tp.Dict[str, str]]] = generate_qa_pairs(
-                    prompt, gemini_preprocess_model
+                    prompt, cfg.gemini_preprocess_model
                 )
                 if result:
                     all_generated_data.extend(result)
             else:  # unsupervised
-                prompt = unsupervised_prompt_template.format(text=combined_text)
+                prompt = cfg.unsupervised_prompt_template.format(text=combined_text)
                 result: tp.Optional[str] = generate_unsupervised_text(
-                    prompt, gemini_preprocess_model
+                    prompt, cfg.gemini_preprocess_model
                 )
                 if result:
                     all_generated_data.append({"text": result})
@@ -160,7 +152,7 @@ def main(
     print(f"\nTotal API calls made: {total_api_calls}")
     print(f"Total items generated before processing: {len(all_generated_data)}")
 
-    if mode == "qa":
+    if cfg.mode == "qa":
         unique_qa_pairs: tp.List[tp.Dict[str, str]] = list()
         processed_questions: tp.Set[str] = set()
         for pair in all_generated_data:
@@ -169,13 +161,13 @@ def main(
                 unique_qa_pairs.append(pair)
                 processed_questions.add(question)
         final_data: tp.List[tp.Dict[str, str]] = format_for_llama3(unique_qa_pairs)
-        output_file: str = qa_dataset_path
+        output_file: str = cfg.qa_dataset_path
         print(f"Total unique Q&A pairs after deduplication: {len(unique_qa_pairs)}")
     else:
         final_data = all_generated_data
-        output_file = unsupervised_dataset_path
+        output_file = cfg.unsupervised_dataset_path
 
-    os.makedirs(default_output_dir, exist_ok=True)
+    os.makedirs(cfg.default_output_dir, exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
         for item in final_data:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
