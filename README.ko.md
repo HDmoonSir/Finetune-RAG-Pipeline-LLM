@@ -12,10 +12,12 @@
 
 * `src/`: 주요 Python 소스 코드 디렉토리
 
-  * `data_processing/`: 데이터 추출 및 전처리 관련 스크립트
+  * `data_preprocessing/`: 데이터 추출 및 전처리 관련 스크립트
   * `training/`: 모델 파인튜닝 및 LoRA 병합 관련 스크립트
-  * `rag/`: RAG 파이프라인, 벡터스토어 구축 및 추론 스크립트
+  * `rag/`: RAG 파이프라인 관련 스크립트
   * `evaluation/`: RAG 결과 평가용 스크립트
+  * `inference/`: 모델 추론 및 실험 로딩 관련 스크립트
+  * `utils/`: 유틸리티 스크립트 및 설정 로더
 * `run_data.py`: 데이터 처리 작업 실행 스크립트
 * `run_training.py`: 모델 학습 및 병합 작업 실행 스크립트
 * `run_rag.py`: RAG 파이프라인 실행 스크립트
@@ -53,33 +55,46 @@ python3.11 run_training.py --config config/train/llama-8b-sft.yaml
 
 ### 1. 데이터 준비
 
-`config/data/`에 있는 설정 파일을 통해 데이터 추출 및 전처리를 수행합니다.
+데이터 준비 작업은 `run_data.py`를 통해 하위 명령어(subcommand) 방식으로 수행됩니다.
 
 #### a. PDF 텍스트 추출
 
 * **스크립트:** `run_data.py`
+* **하위 명령어:** `extract-pdf`
 * **기능:** PDF 파일에서 텍스트를 추출하여 JSONL 형식으로 저장
-* **예시 설정 파일:** `config/data/extract_pdf_text.yaml`
 * **실행 명령어:**
 
   ```bash
-  python3.11 run_data.py --config config/data/extract_pdf_text.yaml
+  python3.11 run_data.py extract-pdf --file_path data/your_file.pdf --output_file data/output.jsonl
   ```
 
 #### b. 학습 데이터 생성
 
 * **스크립트:** `run_data.py`
+* **하위 명령어:** `preprocess-gemini`
 * **기능:** Gemini API를 이용해 추출된 텍스트로 QA 또는 비지도 학습 데이터 생성
 * **사전 설정:**
 
   ```bash
   export GEMINI_API_KEY="YOUR_API_KEY"
   ```
-* **설정 파일 예시:** `config/data/preprocess_gemini.yaml`
+* **설정 파일:** `config/data/preprocess_gemini.yaml`
 * **실행 명령어:**
 
   ```bash
-  python3.11 run_data.py --config config/data/preprocess_gemini.yaml
+  python3.11 run_data.py preprocess-gemini --config config/data/preprocess_gemini.yaml
+  ```
+
+#### c. 벡터스토어 구축
+
+* **스크립트:** `run_data.py`
+* **하위 명령어:** `build-db`
+* **기능:** 입력 문서로부터 임베딩을 생성하고 FAISS 기반 벡터스토어 생성
+* **설정 파일:** `config/data/build_vector_store.yaml`
+* **실행 명령어:**
+
+  ```bash
+  python3.11 run_data.py build-db --config config/data/build_vector_store.yaml
   ```
 
 ---
@@ -118,35 +133,27 @@ python3.11 run_training.py --config config/train/llama-8b-sft.yaml
 
 RAG 파이프라인과 평가에서도 LoRA 어댑터를 메모리 상에서 병합해 사용할 수 있습니다.
 
-#### a. 벡터스토어 구축
+#### a. RAG 기반 추론
 
 * **스크립트:** `run_rag.py`
-* **기능:** 입력 문서로부터 임베딩을 생성하고 FAISS 기반 벡터스토어 생성
-* **설정 파일:** `config/data/build_vector_store.yaml`
-* **실행 명령어:**
+* **하위 명령어:** `cli` (대화형 모드) 또는 `pipeline` (단일 질문)
+* **설정:** `config/inference/local_rag.yaml`을 통해 모델 및 벡터스토어 설정
+* **RAG 실행 예시 (CLI):**
 
   ```bash
-  python3.11 run_rag.py --config config/data/build_vector_store.yaml
+  python3.11 run_rag.py cli --config config/inference/local_rag.yaml
   ```
 
-#### b. RAG 기반 추론 및 평가
-
-* **스크립트:** `run_rag.py`, `run_evaluation.py`
-* **설정 예시:**
-
-```yaml
-model:
-  model_id: "기본 모델 ID 또는 경로"
-  unsupervised_lora_path: "비지도 학습 LoRA 경로 (선택)"
-  sft_lora_path: "SFT 학습 LoRA 경로 (선택)"
-```
-
-* **RAG 실행 예시:**
+* **RAG 실행 예시 (단일 질문):**
 
   ```bash
-  python3.11 run_rag.py --config config/inference/local_rag.yaml
+  python3.11 run_rag.py pipeline --config config/inference/local_rag.yaml --question "질문 내용"
   ```
 
+#### b. 평가 실행
+
+* **스크립트:** `run_evaluation.py`
+* **기능:** `config/eval/default_eval.yaml`에 정의된 메트릭을 사용하여 RAG 성능 평가
 * **평가 실행 예시:**
 
   ```bash

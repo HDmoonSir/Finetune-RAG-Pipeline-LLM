@@ -7,10 +7,12 @@ This project provides a set of Python scripts to build a custom dataset from PDF
 The project is organized into the following directories:
 
 - `src/`: Contains all Python source code.
-  - `data_processing/`: Scripts for data extraction and preprocessing.
+  - `data_preprocessing/`: Scripts for data extraction and preprocessing.
   - `training/`: Scripts for model fine-tuning and LoRA merging.
-  - `rag/`: Scripts for the RAG pipeline, vector store building, and inference.
+  - `rag/`: Scripts for the RAG pipeline.
   - `evaluation/`: Scripts for evaluating the RAG pipeline.
+  - `inference/`: Scripts for model inference and experiment loading.
+  - `utils/`: Utility scripts and configuration loaders.
 - `run_data.py`: Runner script for data processing tasks.
 - `run_training.py`: Runner script for model training and merging tasks.
 - `run_rag.py`: Runner script for RAG pipeline tasks.
@@ -49,23 +51,34 @@ The process is divided into the following stages. All scripts should be run from
 
 ### 1. Data Preparation
 
-Data preparation tasks are configured via YAML files in `config/data/`.
+Data preparation tasks are managed by `run_data.py` with specific subcommands.
 
 #### a. Extract Text from PDF
 - **Script:** `run_data.py`
-- **Description:** Extracts text from PDF files and saves it in JSONL format. Configuration for this task (e.g., input/output paths, page ranges) is defined in `config/data/extract_pdf_text.yaml` (example).
+- **Subcommand:** `extract-pdf`
+- **Description:** Extracts text from PDF files and saves it in JSONL format.
 - **Usage:**
   ```bash
-  python3.11 run_data.py --config config/data/extract_pdf_text.yaml
+  python3.11 run_data.py extract-pdf --file_path data/your_file.pdf --output_file data/output.jsonl
   ```
 
 #### b. Generate Training Data
 - **Script:** `run_data.py`
+- **Subcommand:** `preprocess-gemini`
 - **Description:** Uses extracted text to generate training datasets (QA or unsupervised) with the Gemini API. Configuration for this task (e.g., mode, dataset paths, prompt templates) is defined in `config/data/preprocess_gemini.yaml`.
 - **Prerequisites:** `export GEMINI_API_KEY="YOUR_API_KEY"`
 - **Usage:**
   ```bash
-  python3.11 run_data.py --config config/data/preprocess_gemini.yaml
+  python3.11 run_data.py preprocess-gemini --config config/data/preprocess_gemini.yaml
+  ```
+
+#### c. Build Vector Store
+- **Script:** `run_data.py`
+- **Subcommand:** `build-db`
+- **Description:** Builds a FAISS vector store from your source documents for the RAG pipeline. Configuration for this task (e.g., input directory, vector store path, embedding model) is defined in `config/data/build_vector_store.yaml`.
+- **Usage:**
+  ```bash
+  python3.11 run_data.py build-db --config config/data/build_vector_store.yaml
   ```
 
 ### 2. Model Fine-tuning
@@ -98,30 +111,28 @@ The fine-tuning process is designed as a two-stage workflow to first adapt the m
 
 The RAG and Evaluation pipelines use the same flexible model loading mechanism, allowing you to combine the effects of both unsupervised and supervised LoRA adapters at runtime.
 
-#### a. Build Vector Store
+#### a. Run RAG Inference
 - **Script:** `run_rag.py`
-- **Description:** Builds a FAISS vector store from your source documents for the RAG pipeline. Configuration for this task (e.g., input directory, vector store path, embedding model) is defined in `config/data/build_vector_store.yaml`.
-- **Usage:**
-  ```bash
-  python3.11 run_rag.py --config config/data/build_vector_store.yaml
-  ```
-
-#### b. Run RAG Inference or Evaluation
-- **Scripts:** `run_rag.py`, `run_evaluation.py`
-- **Description:** Runs the RAG pipeline or evaluates it. The key is the model configuration in your YAML file (`config/inference/local_rag.yaml` or `config/eval/default_eval.yaml`). The pipeline performs a sequential, in-memory merge of the specified LoRA adapters.
-- **Configuration:**
-  - `model.model_id`: The original base model (e.g., `MLP-KTLim/llama-3-Korean-Bllossom-8B`).
+- **Subcommands:** `cli` or `pipeline`
+- **Description:** Runs the RAG pipeline interactively (`cli`) or for a single query (`pipeline`).
+- **Configuration:** `config/inference/local_rag.yaml` defines the model and vector store settings.
+  - `model.model_id`: The original base model.
   - `model.unsupervised_lora_path`: (Optional) Path to the LoRA from unsupervised training.
   - `model.sft_lora_path`: (Optional) Path to the LoRA from supervised fine-tuning.
-  You can provide one, both, or neither of the LoRA paths. The pipeline will load the base model and sequentially merge any provided adapters in memory before running inference.
-- **Usage (RAG CLI Example):**
+- **Usage (Interactive CLI):**
   ```bash
-  # This config can specify both unsupervised and sft LoRA paths
-  python3.11 run_rag.py --config config/inference/local_rag.yaml
+  python3.11 run_rag.py cli --config config/inference/local_rag.yaml
   ```
-- **Usage (Evaluation Example):**
+- **Usage (Single Query):**
   ```bash
-  # This config can also specify both LoRA paths for evaluation
+  python3.11 run_rag.py pipeline --config config/inference/local_rag.yaml --question "Your question here"
+  ```
+
+#### b. Run Evaluation
+- **Script:** `run_evaluation.py`
+- **Description:** Evaluates the RAG pipeline using metrics defined in `config/eval/default_eval.yaml`.
+- **Usage:**
+  ```bash
   python3.11 run_evaluation.py --config config/eval/default_eval.yaml
   ```
 
